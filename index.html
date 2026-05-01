@@ -550,7 +550,7 @@
     padding: 13px 16px;
     color: var(--text);
     font-family: 'Syne', sans-serif;
-    font-size: 20px; letter-spacing: 5px; text-align: center;
+    font-size: 15px; letter-spacing: 0; text-align: left;
     outline: none; margin-bottom: 14px;
     transition: border-color 0.2s;
   }
@@ -629,10 +629,10 @@
     <div class="auth-logo" id="auth-logo" onclick="handleLogoTap()">📋</div>
     <div class="auth-title">AuditPro</div>
     <div class="auth-sub">SBM Corp · Auditorías de Limpieza &amp; Mantenimiento</div>
-    <input class="auth-input" id="auth-input" type="password"
-      placeholder="••••" maxlength="30"
-      onkeypress="if(event.key==='Enter')tryLogin()">
-    <button class="auth-btn" id="auth-btn" onclick="tryLogin()">Ingresar →</button>
+    <input class="auth-input" id="auth-input" type="email"
+placeholder="Ingresa tu correo"
+onkeypress="if(event.key==='Enter') handleLogin()">
+    <button class="auth-btn" id="auth-btn" onclick="handleLogin()">Ingresar →</button>
     <div class="auth-error" id="auth-error"></div>
     <div class="auth-lockout" id="auth-lockout">
       🔒 Acceso bloqueado — demasiados intentos
@@ -791,19 +791,18 @@ function dismissSetKey() {
 }
 
 function lockSession() {
+  // Cierra la sesión local y fuerza nueva validación contra Supabase
+  localStorage.removeItem('auditpro_user');
   sessionStorage.removeItem('auditpro_auth');
   document.getElementById('auth-input').value = '';
   document.getElementById('auth-error').textContent = '';
   document.getElementById('auth-overlay').style.display = 'flex';
   document.getElementById('btn-lock-session').style.display = 'none';
   document.getElementById('demo-badge').style.display = 'none';
+  location.reload();
 }
 
-// Persist session while browser is open
-if (sessionStorage.getItem('auditpro_auth') === '1') {
-  document.getElementById('auth-overlay').style.display = 'none';
-  document.getElementById('btn-lock-session').style.display = '';
-}
+// La sesión ahora la controla Supabase Access al final del archivo.
 </script>
 
 <header>
@@ -814,7 +813,6 @@ if (sessionStorage.getItem('auditpro_auth') === '1') {
   <div style="display:flex;align-items:center;gap:10px">
     <button id="btn-back-setup" onclick="backToSetup()" style="display:none;background:transparent;border:1px solid var(--border);color:var(--muted);font-family:'Syne',sans-serif;font-size:12px;font-weight:700;padding:6px 14px;border-radius:7px;cursor:pointer;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">← Menú</button>
     <button id="btn-lock-session" onclick="lockSession()" title="Bloquear sesión">🔒</button>
-    <span class="demo-badge" id="demo-badge">DEMO</span>
     <div class="header-meta">
       <div><strong id="hdr-date">—</strong></div>
       <div id="hdr-progress">0 de 0 áreas revisadas</div>
@@ -2018,9 +2016,192 @@ function showToast(msg, type) {
 }
 
 // ════════════════════════════════════════════════════
-//  BOOT
+//  BOOT CONTROLADO POR SUPABASE
+//  Nota: init() se ejecuta después de validar acceso.
 // ════════════════════════════════════════════════════
-init();
+</script>
+
+<!-- SUPABASE ACCESS -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+// ════════════════════════════════════════════════════
+//  CONFIGURACIÓN SUPABASE
+// ════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://vwbebqdrjdcyensmdgsn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3YmVicWRyamRjeWVuc21kZ3NuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MDEzNTcsImV4cCI6MjA5MzE3NzM1N30.Re_75yYJICVSN3J9DcoTuj3qs_m08ZxCYC6k_Q8gVbI';
+
+// ── Inicializar cliente Supabase con protección ──
+let _supabaseClient = null;
+let _supabaseError = null;
+
+try {
+  if (window.supabase && window.supabase.createClient) {
+    _supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } else {
+    _supabaseError = 'La librería Supabase no cargó. Verifica tu conexión a internet.';
+    console.error('[AuditPro] Supabase library not available on window.supabase');
+  }
+} catch(initErr) {
+  _supabaseError = 'Error al inicializar Supabase: ' + initErr.message;
+  console.error('[AuditPro] createClient error:', initErr);
+}
+
+// ── Funciones de acceso ──
+async function validateAccess(email) {
+  if (!_supabaseClient) {
+    return { ok: false, reason: 'config_error', detail: _supabaseError };
+  }
+
+  const cleanEmail = String(email || '').trim().toLowerCase();
+
+  try {
+    const { data, error } = await _supabaseClient
+      .from('user_access')
+      .select('*')
+      .eq('email', cleanEmail)
+      .eq('product', 'auditpro')
+      .eq('status', 'active')
+      .single();
+
+    console.log('[AuditPro] validateAccess result:', { data, error, cleanEmail });
+
+    if (error) {
+      // PGRST116 = no rows found (not an error per se, just no record)
+      if (error.code === 'PGRST116') return { ok: false, reason: 'no_access' };
+      return { ok: false, reason: 'db_error', detail: error.message };
+    }
+
+    if (!data) return { ok: false, reason: 'no_access' };
+
+    if (data.access_until && new Date(data.access_until) < new Date()) {
+      return { ok: false, reason: 'expired' };
+    }
+
+    return { ok: true, user: data };
+  } catch(fetchErr) {
+    console.error('[AuditPro] validateAccess fetch error:', fetchErr);
+    return { ok: false, reason: 'network_error', detail: fetchErr.message };
+  }
+}
+
+function unlockAppAfterSupabaseAccess(email) {
+  localStorage.setItem('auditpro_user', String(email || '').trim().toLowerCase());
+  sessionStorage.setItem('auditpro_auth', '1');
+
+  const auth = document.getElementById('auth-overlay');
+  if (auth) auth.style.display = 'none';
+
+  const lock = document.getElementById('btn-lock-session');
+  if (lock) lock.style.display = '';
+}
+
+function showAuthError(msg) {
+  const err = document.getElementById('auth-error');
+  if (err) {
+    err.textContent = msg;
+    err.style.fontSize = '13px';
+    err.style.padding = '8px 0';
+  }
+}
+
+async function checkAccessBeforeStart() {
+  const email = localStorage.getItem('auditpro_user');
+  if (!email) return false;
+
+  const result = await validateAccess(email);
+
+  if (!result.ok) {
+    localStorage.removeItem('auditpro_user');
+    sessionStorage.removeItem('auditpro_auth');
+    if (result.reason === 'expired') {
+      showAuthError('Tu acceso a AuditPro ha vencido.');
+    }
+    return false;
+  }
+
+  unlockAppAfterSupabaseAccess(email);
+  init();
+  return true;
+}
+
+// Redefine lockSession para limpiar sesión local también
+window.lockSession = function() {
+  localStorage.removeItem('auditpro_user');
+  sessionStorage.removeItem('auditpro_auth');
+  location.reload();
+};
+
+// ════════════════════════════════════════════════════
+//  HANDLE LOGIN — siempre disponible globalmente
+// ════════════════════════════════════════════════════
+window.handleLogin = async function() {
+  const input = document.getElementById('auth-input');
+  const btn   = document.getElementById('auth-btn');
+  const email = String(input ? input.value : '').trim().toLowerCase();
+
+  showAuthError('');
+
+  // Verificar que la librería cargó
+  if (!_supabaseClient) {
+    showAuthError(_supabaseError || 'Error de configuración. Verifica tu conexión a internet y recarga.');
+    return;
+  }
+
+  if (!email) {
+    showAuthError('Ingresa tu correo electrónico.');
+    return;
+  }
+
+  // Validación básica de formato email
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showAuthError('El formato del correo no es válido.');
+    return;
+  }
+
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'Validando...'; }
+
+    const result = await validateAccess(email);
+    console.log('[AuditPro] handleLogin result:', result);
+
+    if (!result.ok) {
+      switch(result.reason) {
+        case 'expired':
+          showAuthError('Tu acceso ha vencido. Contacta al administrador.');
+          break;
+        case 'no_access':
+          showAuthError('Correo no autorizado. Verifica que esté registrado en AuditPro.');
+          break;
+        case 'config_error':
+          showAuthError('Error de configuración Supabase: ' + (result.detail || ''));
+          break;
+        case 'db_error':
+          showAuthError('Error de base de datos: ' + (result.detail || 'Revisa los permisos de la tabla user_access.'));
+          break;
+        case 'network_error':
+          showAuthError('Sin conexión a Supabase. Verifica internet y vuelve a intentar.');
+          break;
+        default:
+          showAuthError('Acceso denegado. Código: ' + result.reason);
+      }
+      return;
+    }
+
+    // ✅ Acceso válido
+    unlockAppAfterSupabaseAccess(email);
+    init();
+
+  } catch (e) {
+    console.error('[AuditPro] handleLogin unexpected error:', e);
+    showAuthError('Error inesperado: ' + e.message + '. Abre la consola (F12) para más detalles.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Ingresar →'; }
+  }
+};
+
+// Al cargar: si ya había correo guardado, valida automáticamente y entra
+checkAccessBeforeStart();
 </script>
 </body>
 </html>

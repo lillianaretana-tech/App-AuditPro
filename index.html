@@ -914,6 +914,7 @@ if (sessionStorage.getItem('auditpro_auth') === '1') {
       <div class="tasks-summary-section" id="tasks-summary"></div>
 
       <div class="export-row">
+        <button class="btn btn-outline" onclick="returnToAudit()">← Volver a revisar</button>
         <button class="btn btn-primary" onclick="exportText()">📋 Copiar Informe</button>
         <button class="btn btn-outline" onclick="window.print()">🖨️ Imprimir</button>
         <button class="btn btn-outline" onclick="newAudit()">➕ Nueva Auditoría</button>
@@ -1237,7 +1238,14 @@ function renderSidebar() {
       <span>${def.short}</span>
       ${sc > 0 ? `<span class="sidebar-score-pill ${pillClass(sc)}">${fmtScore(sc)}</span>` : ''}
     `;
-    div.onclick = () => { state.currentAreaIdx = idx; renderArea(); renderSidebar(); };
+    div.onclick = () => {
+      state.currentAreaIdx = idx;
+      document.getElementById('screen-summary').style.display = 'none';
+      document.getElementById('screen-setup').style.display = 'none';
+      document.getElementById('screen-audit').style.display = 'block';
+      renderArea();
+      renderSidebar();
+    };
     sb.appendChild(div);
   });
 
@@ -1395,7 +1403,15 @@ function pillClass(v) {
 }
 
 function fmtScore(v) {
-  return v % 1 === 0 ? v.toString() : v.toFixed(1);
+  if (!v || Number(v) === 0 || isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return n.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+}
+
+function fmtScoreOne(v) {
+  if (!v || Number(v) === 0 || isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return n.toFixed(1).replace(/\.0$/, '');
 }
 
 function renderScoreBtns(type, targetId, current, parentId) {
@@ -1412,12 +1428,28 @@ function renderScoreBtns(type, targetId, current, parentId) {
 }
 
 function calcAreaAvg(areaId) {
-  const subScores = Object.values(state.areas[areaId].subareas)
-    .map(s => s.score).filter(s => s > 0);
+  const subScores = Object.values(state.areas[areaId].subareas || {})
+    .map(s => Number(s.score)).filter(s => s > 0);
   if (!subScores.length) return 0;
-  const raw = subScores.reduce((a,b) => a+b, 0) / subScores.length;
-  // Round to nearest 0.5
-  return Math.round(raw * 2) / 2;
+  return subScores.reduce((a,b) => a + b, 0) / subScores.length;
+}
+
+function calculateGlobalAverage() {
+  return calculateGlobalAverageForState(state);
+}
+
+function calculateGlobalAverageForState(st) {
+  const scores = [];
+  (st.selectedAreas || []).forEach(areaId => {
+    const area = st.areas && st.areas[areaId];
+    if (!area || !area.subareas) return;
+    Object.values(area.subareas).forEach(sub => {
+      const score = Number(sub.score);
+      if (score > 0) scores.push(score);
+    });
+  });
+  if (!scores.length) return 0;
+  return scores.reduce((a,b) => a + b, 0) / scores.length;
 }
 
 function setScore(type, targetId, val, parentId) {
@@ -1661,6 +1693,16 @@ function navigate(dir) {
   renderSidebar();
 }
 
+function returnToAudit() {
+  document.getElementById('screen-summary').style.display = 'none';
+  document.getElementById('screen-setup').style.display = 'none';
+  document.getElementById('screen-audit').style.display = 'block';
+  document.getElementById('sidebar').classList.add('visible');
+  document.getElementById('btn-back-setup').style.display = '';
+  renderArea();
+  renderSidebar();
+}
+
 // ════════════════════════════════════════════════════
 //  SUMMARY
 // ════════════════════════════════════════════════════
@@ -1697,13 +1739,18 @@ function showSummary() {
   document.getElementById('summary-meta').innerHTML =
     `📍 ${state.building} ${state.floor ? '· ' + state.floor : ''} &nbsp;|&nbsp; 📅 ${formatDate(state.date)} &nbsp;|&nbsp; 👤 ${state.auditor} &nbsp;|&nbsp; 📋 ${state.type}`;
 
-  // Scores
-  const scores = state.selectedAreas.map(id => {
-    const sc = state.areas[id].score;
-    return sc > 0 ? sc : calcAreaAvg(id);
-  }).filter(s => s > 0);
-  const avg = scores.length ? (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : '—';
-  const avgNum = parseFloat(avg);
+  // Scores: promedio global real de todas las subáreas calificadas
+  const subScores = [];
+  state.selectedAreas.forEach(areaId => {
+    const area = state.areas[areaId];
+    if (!area || !area.subareas) return;
+    Object.values(area.subareas).forEach(sub => {
+      const score = Number(sub.score);
+      if (score > 0) subScores.push(score);
+    });
+  });
+  const avgNum = subScores.length ? (subScores.reduce((a,b) => a + b, 0) / subScores.length) : 0;
+  const avg = subScores.length ? fmtScore(avgNum) : '—';
 
   // Overall
   const scoreLabel = avgNum >= 4.5 ? '🌟 Excelente' : avgNum >= 3.5 ? '👍 Bueno' : avgNum >= 2.5 ? '⚠️ Regular' : avgNum >= 1.5 ? '❌ Malo' : '🚨 Crítico';
@@ -1712,7 +1759,7 @@ function showSummary() {
     <div class="os-num" style="color:var(--${scoreClass})">${avg}</div>
     <div class="os-info">
       <div class="os-title">${scoreLabel}</div>
-      <div class="os-sub">Promedio de ${scores.length} área(s) calificada(s) de ${state.selectedAreas.length} revisadas</div>
+      <div class="os-sub">Promedio real de ${subScores.length} subárea(s) calificada(s) en ${state.selectedAreas.length} área(s) revisada(s)</div>
       <div style="margin-top:10px">
         <div class="progress-bar" style="height:8px;width:280px"><div class="progress-fill" style="width:${(avgNum/5)*100}%"></div></div>
       </div>
@@ -1723,8 +1770,8 @@ function showSummary() {
   const grid = document.getElementById('score-cards');
   grid.innerHTML = state.selectedAreas.map(id => {
     const def = AREA_DEFS.find(a => a.id === id);
-    const sc = state.areas[id].score;
-    const lbl = sc >= 5 ? 'Excelente' : sc >= 4 ? 'Bueno' : sc >= 3 ? 'Regular' : sc >= 2 ? 'Malo' : sc > 0 ? 'Pésimo' : 'Sin calificar';
+    const sc = calcAreaAvg(id);
+    const lbl = sc >= 5 ? 'Excelente' : sc >= 4.5 ? 'Muy bueno' : sc >= 4 ? 'Bueno' : sc >= 3 ? 'Regular' : sc >= 2 ? 'Malo' : sc > 0 ? 'Pésimo' : 'Sin calificar';
     const scColor = sc > 0 ? scoreColorClass(sc).replace('c','score-') : 'muted';
     return `<div class="score-card">
       <div class="sc-icon">${def.icon}</div>
@@ -1790,16 +1837,17 @@ function exportText() {
   lines.push('Auditor: ' + state.auditor);
   lines.push('Tipo: ' + state.type);
   lines.push('');
-  const scores = state.selectedAreas.map(id => { const sc = state.areas[id].score; return sc > 0 ? sc : calcAreaAvg(id); }).filter(s => s > 0);
-  const avg = scores.length ? (scores.reduce((a,b) => a+b, 0) / scores.length).toFixed(1) : '—';
+  const globalAvg = calculateGlobalAverage();
+  const avg = globalAvg > 0 ? fmtScore(globalAvg) : '—';
   lines.push('NOTA PROMEDIO: ' + avg + ' / 5');
   lines.push('');
   lines.push('─── CALIFICACIONES POR ÁREA ───');
   state.selectedAreas.forEach(id => {
     const def = AREA_DEFS.find(a => a.id === id);
     const areaData = state.areas[id];
-    const lbl = ['','Pésimo','Malo','Regular','Bueno','Excelente'][areaData.score] || 'Sin calificar';
-    lines.push(def.icon + ' ' + def.name + ': ' + (areaData.score || '—') + '/5 (' + lbl + ')');
+    const areaScore = calcAreaAvg(id);
+    const lbl = areaScore >= 5 ? 'Excelente' : areaScore >= 4.5 ? 'Muy bueno' : areaScore >= 4 ? 'Bueno' : areaScore >= 3 ? 'Regular' : areaScore >= 2 ? 'Malo' : areaScore > 0 ? 'Pésimo' : 'Sin calificar';
+    lines.push(def.icon + ' ' + def.name + ': ' + (areaScore > 0 ? fmtScore(areaScore) : '—') + '/5 (' + lbl + ')');
     if (areaData.comment) lines.push('   → ' + areaData.comment);
   });
   lines.push('');
@@ -1875,8 +1923,8 @@ function loadHistory() {
     const saves = JSON.parse(localStorage.getItem('auditpro_saves') || '[]');
     if (saves.length === 0) { list.innerHTML = '<div class="empty-state"><div class="ei">📂</div><div>Sin auditorías guardadas</div></div>'; return; }
     list.innerHTML = saves.map((s, i) => {
-      const scores = s.state.selectedAreas.map(id => s.state.areas[id].score).filter(sc => sc > 0);
-      const avg = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : '—';
+      const avgVal = calculateGlobalAverageForState(s.state);
+      const avg = avgVal > 0 ? fmtScore(avgVal) : '—';
       return `<div class="task-item" style="margin-bottom:8px">
         <div style="flex:1">
           <div style="font-weight:500">${s.state.building} ${s.state.floor ? '· ' + s.state.floor : ''}</div>

@@ -448,6 +448,12 @@
     .content { padding: 10px; }
     .surface, .surface2 { background: #f5f5f5 !important; }
     .score-card, .overall-score, .task-item { border: 1px solid #ccc !important; }
+    #photo-evidence-section { display: block !important; }
+    #photo-evidence-section img { max-width: 100%; }
+    .photo-evidence-card { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc !important; background: #fff !important; }
+    .photo-evidence-card img { height: 160px !important; object-fit: cover; }
+    #photo-evidence-section > div { grid-template-columns: repeat(2, 1fr) !important; }
+    :root { --text: #111; --muted: #555; --surface: #f8f8f8; --surface2: #eee; --border: #ccc; --accent: #c47a00; --score-1: #cc0000; --score-2: #c05000; --score-3: #996600; --score-4: #4a7a00; --score-5: #006600; }
   }
 
   /* ── TOAST ── */
@@ -628,7 +634,7 @@
   <div class="auth-box">
     <div class="auth-logo" id="auth-logo" onclick="handleLogoTap()">📋</div>
     <div class="auth-title">AuditPro</div>
-    <div class="auth-sub">LRV · Auditorías de Limpieza &amp; Mantenimiento</div>
+    <div class="auth-sub">SBM Corp · Auditorías de Limpieza &amp; Mantenimiento</div>
     <input class="auth-input" id="auth-input" type="email"
 placeholder="Ingresa tu correo"
 onkeypress="if(event.key==='Enter') handleLogin()">
@@ -1194,7 +1200,7 @@ function startAudit() {
     const def = AREA_DEFS.find(a => a.id === id);
     state.areas[id] = { score: 0, comment: '', subareas: {} };
     def.subareas.forEach(sub => {
-      state.areas[id].subareas[sub.id] = { score: 0, comment: '', tasks: [] };
+      state.areas[id].subareas[sub.id] = { score: 0, comment: '', tasks: [], photo: null, photoName: '' };
     });
   });
 
@@ -1330,16 +1336,20 @@ function renderArea() {
           <textarea class="form-input" rows="2" placeholder="¿Qué encontraste específicamente?"
             onchange="state.areas['${id}'].subareas['${sub.id}'].comment=this.value; clearWarning('${sub.id}');">${subData.comment}</textarea>
           <div class="divider"></div>
-          <div class="form-label" style="margin:0 0 8px 0">🤖 ANÁLISIS DE FOTO CON IA</div>
+          <div class="form-label" style="margin:0 0 8px 0">📸 FOTO DE EVIDENCIA + ANÁLISIS IA</div>
           <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
+            ${subData.photo ? `<div id="photo-thumb-${sub.id}" style="margin-bottom:10px">
+              <img src="${subData.photo}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;display:block">
+              <div style="font-size:10px;color:var(--success);margin-top:4px">✅ Foto adjunta — aparecerá en el resumen y reporte impreso</div>
+            </div>` : `<div id="photo-thumb-${sub.id}"></div>`}
             <div style="font-size:11px;color:var(--muted);line-height:1.4;margin-bottom:10px">
-              Sube una foto de referencia. La imagen se envía temporalmente a Make/OpenAI para generar el análisis; no se guarda dentro de la app.
+              Toma o sube una foto. Podés solo adjuntarla como evidencia, o analizarla con IA para generar el hallazgo automáticamente.
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <input class="form-input" id="ai-photo-${id}-${sub.id}" type="file" accept="image/*" capture="environment" style="flex:1;min-width:190px;padding:9px">
-              <button class="btn btn-outline btn-sm" onclick="analyzePhotoWithAI('${id}','${sub.id}')">📸 Analizar con IA</button>
+              <input class="form-input" id="ai-photo-${id}-${sub.id}" type="file" accept="image/*" capture="environment" style="flex:1;min-width:190px;padding:9px" onchange="attachPhotoOnly('${id}','${sub.id}')">
+              <button class="btn btn-outline btn-sm" onclick="analyzePhotoWithAI('${id}','${sub.id}')">🤖 Analizar con IA</button>
             </div>
-            <div id="ai-result-${id}-${sub.id}" style="display:none;margin-top:10px;padding:10px;border-radius:8px;background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.35);font-size:12px;line-height:1.45;color:var(--text);white-space:pre-wrap"></div>
+            <div id="ai-result-${id}-${sub.id}" style="${subData.ai_analysis ? '' : 'display:none;'}margin-top:10px;padding:10px;border-radius:8px;background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.35);font-size:12px;line-height:1.45;color:var(--text);white-space:pre-wrap">${subData.ai_analysis ? buildAIReportText(subData.ai_analysis) : ''}</div>
           </div>
           <div class="divider"></div>
           <div class="tasks-header">
@@ -1515,6 +1525,56 @@ function removeTask(areaId, subId, idx) {
 
 
 // ════════════════════════════════════════════════════
+//  PHOTO STORAGE — resize + save to state
+// ════════════════════════════════════════════════════
+function resizeAndStorePhoto(file, areaId, subId) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 700;
+        const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        const base64 = canvas.toDataURL('image/jpeg', 0.80);
+        if (state.areas[areaId] && state.areas[areaId].subareas[subId]) {
+          state.areas[areaId].subareas[subId].photo = base64;
+          state.areas[areaId].subareas[subId].photoName = file.name || 'foto.jpg';
+        }
+        // Show thumbnail immediately
+        const thumb = document.getElementById('photo-thumb-' + subId);
+        if (thumb) {
+          thumb.innerHTML = `<img src="${base64}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:cover;display:block">
+            <div style="font-size:10px;color:var(--success);margin-top:4px">✅ Foto adjunta — aparecerá en el resumen y reporte impreso</div>`;
+        }
+        resolve(base64);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Adjuntar foto como evidencia SIN análisis IA
+async function attachPhotoOnly(areaId, subId) {
+  const input = document.getElementById('ai-photo-' + areaId + '-' + subId);
+  const file = input && input.files ? input.files[0] : null;
+  if (!file || !file.type.startsWith('image/')) return;
+  try {
+    await resizeAndStorePhoto(file, areaId, subId);
+    autoSave();
+    showToast('📎 Foto adjuntada como evidencia');
+  } catch(e) {
+    console.error('[AuditPro] Error adjuntando foto:', e);
+  }
+}
+
+// ════════════════════════════════════════════════════
 //  AI PHOTO ANALYSIS VIA MAKE
 // ════════════════════════════════════════════════════
 // Pega aquí tu URL de Webhook de Make cuando lo tengas listo.
@@ -1569,8 +1629,10 @@ async function analyzePhotoWithAI(areaId, subId) {
   if (!file) { showToast('⚠️ Selecciona o toma una foto primero', 'warning'); return; }
   if (!file.type.startsWith('image/')) { showToast('⚠️ El archivo debe ser una imagen', 'warning'); return; }
   resultBox.style.display = 'block';
-  resultBox.textContent = '⏳ Analizando imagen con IA...';
+  resultBox.textContent = '⏳ Guardando foto y analizando con IA...';
   try {
+    // Guardar foto en estado primero
+    await resizeAndStorePhoto(file, areaId, subId);
     const areaDef = AREA_DEFS.find(a => a.id === areaId);
     const subDef = areaDef ? areaDef.subareas.find(s => s.id === subId) : null;
     const formData = new FormData();
@@ -1818,6 +1880,64 @@ function showSummary() {
     }
   }
 
+  // Photo evidence section
+  const allPhotos = [];
+  state.selectedAreas.forEach(id => {
+    const def = AREA_DEFS.find(a => a.id === id);
+    const areaData = state.areas[id];
+    Object.keys(areaData.subareas).forEach(subId => {
+      const sub = areaData.subareas[subId];
+      const subDef = def.subareas.find(s => s.id === subId);
+      if (sub.photo) {
+        allPhotos.push({
+          area: def.name, areaIcon: def.icon,
+          subarea: subDef ? subDef.name : subId,
+          photo: sub.photo,
+          analysis: sub.ai_analysis,
+          comment: sub.comment,
+          tasks: sub.tasks || []
+        });
+      }
+    });
+  });
+
+  // Remove previous photo section if exists
+  const prevPhotoSec = document.getElementById('photo-evidence-section');
+  if (prevPhotoSec) prevPhotoSec.remove();
+
+  if (allPhotos.length > 0) {
+    const photoSec = document.createElement('div');
+    photoSec.id = 'photo-evidence-section';
+    photoSec.className = 'tasks-summary-section';
+    photoSec.style.marginTop = '28px';
+    photoSec.innerHTML = `
+      <div class="tasks-summary-title">📸 Evidencia Fotográfica (${allPhotos.length} foto${allPhotos.length > 1 ? 's' : ''})</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
+        ${allPhotos.map(p => {
+          let analysisHtml = '';
+          if (p.analysis) {
+            if (p.analysis.descripcion) analysisHtml += `<div style="margin-bottom:3px"><b>Descripción:</b> ${p.analysis.descripcion}</div>`;
+            if (p.analysis.severidad)   analysisHtml += `<div style="margin-bottom:3px"><b>Severidad:</b> ${p.analysis.severidad}</div>`;
+            if (p.analysis.accion)      analysisHtml += `<div style="margin-bottom:3px"><b>Acción:</b> ${p.analysis.accion}</div>`;
+          } else if (p.comment) {
+            analysisHtml = `<div style="color:var(--muted)">${p.comment.substring(0, 120)}${p.comment.length > 120 ? '...' : ''}</div>`;
+          } else {
+            analysisHtml = `<div style="color:var(--muted);font-style:italic">Foto de evidencia adjunta</div>`;
+          }
+          const urgentTasks = p.tasks.filter(t => t.priority === 'urgente');
+          return `<div class="photo-evidence-card" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;break-inside:avoid;page-break-inside:avoid">
+            <img src="${p.photo}" style="width:100%;height:190px;object-fit:cover;display:block">
+            <div style="padding:12px">
+              <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:0.5px;margin-bottom:6px;text-transform:uppercase">${p.areaIcon} ${p.area} › ${p.subarea}</div>
+              <div style="font-size:12px;line-height:1.55;color:var(--text)">${analysisHtml}</div>
+              ${urgentTasks.length ? `<div style="margin-top:8px;font-size:11px;color:var(--score-1)">🔴 ${urgentTasks[0].text}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    tasksSec.after(photoSec);
+  }
+
   // Save to history
   saveToHistory();
 }
@@ -1902,10 +2022,18 @@ function exportText() {
 // ════════════════════════════════════════════════════
 function autoSave() {
   try {
+    // Clonar state SIN fotos para evitar overflow en localStorage
+    const stateForSave = JSON.parse(JSON.stringify(state));
+    Object.keys(stateForSave.areas || {}).forEach(areaId => {
+      Object.keys((stateForSave.areas[areaId] || {}).subareas || {}).forEach(subId => {
+        delete stateForSave.areas[areaId].subareas[subId].photo;
+        delete stateForSave.areas[areaId].subareas[subId].photoName;
+      });
+    });
     const saves = JSON.parse(localStorage.getItem('auditpro_saves') || '[]');
     const id = `${state.building}_${state.date}`.replace(/\s/g, '_');
     const idx = saves.findIndex(s => s.id === id);
-    const entry = { id, ts: Date.now(), state: JSON.parse(JSON.stringify(state)) };
+    const entry = { id, ts: Date.now(), state: stateForSave };
     if (idx >= 0) saves[idx] = entry; else saves.unshift(entry);
     localStorage.setItem('auditpro_saves', JSON.stringify(saves.slice(0, 30)));
   } catch(e) {}

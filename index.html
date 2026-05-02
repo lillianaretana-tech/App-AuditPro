@@ -443,18 +443,51 @@
 
   /* ── PRINT STYLES ── */
   @media print {
-    header, .sidebar, .area-nav-btns, .export-row, .btn { display: none !important; }
-    body { background: white; color: black; }
-    .content { padding: 10px; }
-    .surface, .surface2 { background: #f5f5f5 !important; }
-    .score-card, .overall-score, .task-item { border: 1px solid #ccc !important; }
-    #photo-evidence-section { display: block !important; }
-    #photo-evidence-section img { max-width: 100%; }
-    .photo-evidence-card { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc !important; background: #fff !important; }
-    .photo-evidence-card img { height: 160px !important; object-fit: cover; }
-    #photo-evidence-section > div { grid-template-columns: repeat(2, 1fr) !important; }
-    :root { --text: #111; --muted: #555; --surface: #f8f8f8; --surface2: #eee; --border: #ccc; --accent: #c47a00; --score-1: #cc0000; --score-2: #c05000; --score-3: #996600; --score-4: #4a7a00; --score-5: #006600; }
+  header, .sidebar, .area-nav-btns, .export-row, .btn { display: none !important; }
+  body { background: white; color: black; }
+  .content { padding: 10px; }
+  .surface, .surface2 { background: #f5f5f5 !important; }
+  .score-card, .overall-score, .task-item { border: 1px solid #ccc !important; }
+
+  #photo-evidence-section { display: block !important; }
+
+  #photo-evidence-section img { 
+    max-width: 100%;
   }
+
+  .photo-evidence-card { 
+    break-inside: avoid; 
+    page-break-inside: avoid; 
+    border: 1px solid #ccc !important; 
+    background: #fff !important; 
+  }
+
+  /* 🔥 AQUÍ ESTÁ EL CAMBIO IMPORTANTE */
+  .photo-evidence-card img { 
+    width: 100% !important;
+    max-height: 180px !important;
+    height: auto !important;
+    object-fit: contain !important;
+  }
+
+  #photo-evidence-section > div { 
+    grid-template-columns: repeat(2, 1fr) !important; 
+  }
+
+  :root { 
+    --text: #111; 
+    --muted: #555; 
+    --surface: #f8f8f8; 
+    --surface2: #eee; 
+    --border: #ccc; 
+    --accent: #c47a00; 
+    --score-1: #cc0000; 
+    --score-2: #c05000; 
+    --score-3: #996600; 
+    --score-4: #4a7a00; 
+    --score-5: #006600; 
+  }
+}
 
   /* ── TOAST ── */
   .toast {

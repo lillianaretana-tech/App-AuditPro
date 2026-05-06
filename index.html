@@ -690,42 +690,30 @@
     background: var(--accent);
     border-radius: 14px 0 0 14px;
   }
-  .es-title {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 13px;
-    color: var(--accent);
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    margin-bottom: 4px;
-  }
-  .es-datetime {
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    color: var(--muted);
-    margin-bottom: 14px;
-  }
-  .es-section-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 1.3px;
-    text-transform: uppercase;
-    margin-bottom: 7px;
-    margin-top: 14px;
-  }
-  .es-section-label.good { color: var(--success); }
-  .es-section-label.warn { color: var(--score-1); }
-  .es-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .es-chip {
-    font-size: 11px;
-    padding: 4px 11px;
-    border-radius: 20px;
-    line-height: 1.4;
-  }
-  .es-chip.good { background: rgba(34,197,94,0.12); color: var(--success); border: 1px solid rgba(34,197,94,0.25); }
-  .es-chip.warn { background: rgba(239,68,68,0.10); color: var(--score-1); border: 1px solid rgba(239,68,68,0.22); }
-  .es-no-issues { font-size: 12px; color: var(--success); }
-  .es-divider { height: 1px; background: var(--border); margin: 16px 0 0; }
+  .es-title { font-family:'Syne',sans-serif; font-weight:800; font-size:13px; color:var(--accent); letter-spacing:1.2px; text-transform:uppercase; margin-bottom:4px; }
+  .es-datetime { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:14px; }
+  .es-section-label { font-family:'DM Mono',monospace; font-size:9px; letter-spacing:1.3px; text-transform:uppercase; margin-bottom:7px; margin-top:14px; }
+  .es-section-label.good { color:var(--success); }
+  .es-section-label.warn { color:var(--score-1); }
+  .es-chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .es-chip { font-size:11px; padding:4px 11px; border-radius:20px; line-height:1.4; }
+  .es-chip.good { background:rgba(34,197,94,0.12); color:var(--success); border:1px solid rgba(34,197,94,0.25); }
+  .es-chip.warn { background:rgba(239,68,68,0.10); color:var(--score-1); border:1px solid rgba(239,68,68,0.22); }
+  .es-divider { height:1px; background:var(--border); margin:16px 0 0; }
+
+  /* ── MULTI-PHOTO ── */
+  .mp-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; margin-bottom:10px; }
+  .mp-thumb { position:relative; border-radius:8px; overflow:hidden; border:1px solid var(--border); background:var(--surface2); }
+  .mp-thumb img { width:100%; height:88px; object-fit:cover; display:block; }
+  .mp-ai-badge { position:absolute; top:4px; left:4px; background:rgba(34,197,94,0.92); border-radius:4px; padding:2px 5px; font-size:8px; font-weight:700; color:#000; letter-spacing:0.3px; }
+  .mp-del-btn { position:absolute; top:4px; right:4px; background:rgba(20,20,30,0.75); border:none; border-radius:4px; width:22px; height:22px; cursor:pointer; font-size:12px; color:#fff; display:flex; align-items:center; justify-content:center; padding:0; transition:background 0.15s; }
+  .mp-del-btn:hover { background:var(--danger); }
+  .mp-upload-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:6px; }
+  .mp-btn-label { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .mp-btn-label:hover { border-color:var(--accent); color:var(--accent); }
+  .mp-analyze-btn { padding:8px 14px; border-radius:8px; border:1px solid var(--accent2); background:transparent; color:var(--accent2); font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .mp-analyze-btn:hover { background:rgba(59,130,246,0.1); }
+  .mp-analyze-btn:disabled { opacity:0.45; cursor:not-allowed; }
 </style>
 </head>
 <body>
@@ -903,9 +891,9 @@ onkeypress="if(event.key==='Enter') handleLogin()">
       <div id="executive-summary-block" style="display:none">
         <div class="es-title">📋 Resumen Ejecutivo</div>
         <div class="es-datetime" id="es-datetime"></div>
-        <div class="es-section-label good">✅ Áreas / subáreas en buen estado</div>
+        <div class="es-section-label good">✅ Áreas en buen estado (nota 5)</div>
         <div class="es-chips" id="es-good-chips"></div>
-        <div class="es-section-label warn" id="es-warn-label">⚠️ Puntos de mejora detectados</div>
+        <div class="es-section-label warn" id="es-warn-label">⚠️ Puntos de mejora (nota &lt; 5)</div>
         <div class="es-chips" id="es-warn-chips"></div>
         <div class="es-divider"></div>
       </div>
@@ -1081,103 +1069,348 @@ document.head.appendChild(_s);
 })();
 </script>
 <script>
-/* ── EXECUTIVE SUMMARY BLOCK ── */
-(function() {
+/* ═══════════════════════════════════════════════════════
+   PATCH 1 · EXECUTIVE SUMMARY
+   ═══════════════════════════════════════════════════════ */
+(function () {
   function buildExecutiveSummary() {
-    var block = document.getElementById('executive-summary-block');
-    var dtEl  = document.getElementById('es-datetime');
-    var goodEl = document.getElementById('es-good-chips');
-    var warnEl = document.getElementById('es-warn-chips');
-    var warnLabel = document.getElementById('es-warn-label');
+    var block    = document.getElementById('executive-summary-block');
+    var dtEl     = document.getElementById('es-datetime');
+    var goodEl   = document.getElementById('es-good-chips');
+    var warnEl   = document.getElementById('es-warn-chips');
+    var warnLbl  = document.getElementById('es-warn-label');
     if (!block || !dtEl || !goodEl || !warnEl) return;
 
-    // Date/time of the audit completion
     var now = new Date();
     var auditDate = '';
     if (window.state && state.date) {
-      // Parse date from state
-      var parts = state.date.split('-');
-      var months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-      auditDate = parseInt(parts[2]) + ' ' + months[parseInt(parts[1])-1] + ' ' + parts[0] + ' · ';
+      var p = state.date.split('-');
+      var mo = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      auditDate = parseInt(p[2]) + ' ' + mo[parseInt(p[1])-1] + ' ' + p[0] + ' · ';
     }
-    var timeStr = now.toLocaleTimeString('es-CR', {hour:'2-digit', minute:'2-digit'});
-    dtEl.textContent = '📅 ' + auditDate + 'Hora de cierre: ' + timeStr;
+    dtEl.textContent = '📅 ' + auditDate + 'Cierre: ' + now.toLocaleTimeString('es-CR',{hour:'2-digit',minute:'2-digit'});
 
-    // Collect scores from all selected areas / subareas
-    var goodChips = [];
-    var warnChips = [];
-
+    var good = [], warn = [];
     if (window.state && state.selectedAreas && state.areas && typeof AREA_DEFS !== 'undefined') {
-      state.selectedAreas.forEach(function(areaId) {
-        var def = AREA_DEFS.find(function(a){ return a.id === areaId; });
+      state.selectedAreas.forEach(function (areaId) {
+        var def = AREA_DEFS.find(function (a) { return a.id === areaId; });
         var areaData = state.areas[areaId];
         if (!def || !areaData) return;
-
-        def.subareas.forEach(function(sub) {
+        def.subareas.forEach(function (sub) {
           var sd = areaData.subareas[sub.id];
           if (!sd || !sd.score || sd.score === 0) return;
           var sc = parseFloat(sd.score);
-          var label = def.icon + ' ' + def.short + ' › ' + sub.name;
+          var lbl = def.icon + ' ' + def.short + ' › ' + sub.name;
           if (sc >= 5) {
-            goodChips.push(label);
+            good.push(lbl);
           } else {
-            // Include comment or task info
             var note = '';
-            if (sd.comment && sd.comment.trim()) {
-              note = sd.comment.trim().substring(0, 60) + (sd.comment.length > 60 ? '…' : '');
-            } else if (sd.tasks && sd.tasks.length > 0) {
-              note = sd.tasks[0].text.substring(0, 55) + (sd.tasks[0].text.length > 55 ? '…' : '');
-            }
-            var chipText = label + ' (' + parseFloat(sc).toFixed(sc % 1 === 0 ? 0 : 1) + '/5)';
-            if (note) chipText += ' — ' + note;
-            warnChips.push(chipText);
+            if (sd.comment && sd.comment.trim()) note = sd.comment.trim().substring(0,55) + (sd.comment.length>55?'…':'');
+            else if (sd.tasks && sd.tasks.length>0) note = sd.tasks[0].text.substring(0,50) + (sd.tasks[0].text.length>50?'…':'');
+            var sc1 = sc % 1 === 0 ? sc.toFixed(0) : sc.toFixed(1);
+            warn.push(lbl + ' (' + sc1 + '/5)' + (note?' — '+note:''));
           }
         });
       });
     }
 
-    // Render good chips
-    if (goodChips.length === 0) {
-      goodEl.innerHTML = '<span style="font-size:12px;color:var(--muted)">Sin subáreas calificadas con 5</span>';
-    } else {
-      goodEl.innerHTML = goodChips.map(function(t){
-        return '<span class="es-chip good">' + t + '</span>';
-      }).join('');
-    }
+    goodEl.innerHTML = good.length
+      ? good.map(function(t){return '<span class="es-chip good">'+t+'</span>';}).join('')
+      : '<span style="font-size:12px;color:var(--muted)">Sin subáreas con nota máxima aún</span>';
 
-    // Render warn chips
-    if (warnChips.length === 0) {
-      warnLabel.style.display = 'none';
-      warnEl.innerHTML = '';
+    if (warn.length) {
+      warnLbl.style.display = '';
+      warnEl.innerHTML = warn.map(function(t){return '<span class="es-chip warn">'+t+'</span>';}).join('');
     } else {
-      warnLabel.style.display = '';
-      warnEl.innerHTML = warnChips.map(function(t){
-        return '<span class="es-chip warn">' + t + '</span>';
-      }).join('');
+      warnLbl.style.display = 'none';
+      warnEl.innerHTML = '<span style="font-size:12px;color:var(--success)">🎉 Sin puntos de mejora — ¡todo en nivel máximo!</span>';
+      warnLbl.style.display = '';
     }
-
     block.style.display = 'block';
   }
 
-  // Hook into showSummary after it runs
-  var _origShowSummary = window.showSummary;
-  if (typeof _origShowSummary === 'function') {
-    window.showSummary = function() {
-      _origShowSummary.apply(this, arguments);
+  function hookShowSummary() {
+    var orig = window.showSummary;
+    if (typeof orig !== 'function') return false;
+    window.showSummary = function () {
+      orig.apply(this, arguments);
       try { buildExecutiveSummary(); } catch(e) { console.error('[ExecSummary]', e); }
     };
-  } else {
-    // Fallback: poll until showSummary is available
-    var _poll = setInterval(function(){
-      if (typeof window.showSummary === 'function') {
-        clearInterval(_poll);
-        var _orig = window.showSummary;
-        window.showSummary = function() {
-          _orig.apply(this, arguments);
-          try { buildExecutiveSummary(); } catch(e) { console.error('[ExecSummary]', e); }
+    return true;
+  }
+  if (!hookShowSummary()) {
+    var t = setInterval(function(){ if (hookShowSummary()) clearInterval(t); }, 400);
+  }
+})();
+
+
+/* ═══════════════════════════════════════════════════════
+   PATCH 2 · MULTI-PHOTO (galería + cámara + análisis IA)
+   ═══════════════════════════════════════════════════════ */
+(function () {
+
+  /* ── helpers ── */
+  function getPhotos(areaId, subId) {
+    if (!window.state || !state.areas || !state.areas[areaId]) return [];
+    var sub = state.areas[areaId].subareas[subId];
+    if (!sub) return [];
+    if (!Array.isArray(sub.photos)) sub.photos = [];
+    /* migrate legacy single photo */
+    if (sub.photo && sub.photos.length === 0) {
+      sub.photos.push({ data: sub.photo, name: sub.photoName || 'foto.jpg', ai: sub.ai_analysis || null });
+    }
+    return sub.photos;
+  }
+
+  function setSyncLegacy(areaId, subId) {
+    var sub = state.areas[areaId].subareas[subId];
+    if (!sub || !Array.isArray(sub.photos)) return;
+    sub.photo     = sub.photos.length ? sub.photos[0].data : null;
+    sub.photoName = sub.photos.length ? sub.photos[0].name : '';
+    /* keep ai_analysis pointing to first photo's AI result */
+    sub.ai_analysis = sub.photos.length && sub.photos[0].ai ? sub.photos[0].ai : sub.ai_analysis || null;
+  }
+
+  function resizeFile(file) {
+    return new Promise(function (res, rej) {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        var img = new Image();
+        img.onload = function () {
+          var MAX = 700;
+          var ratio = Math.min(MAX/img.width, MAX/img.height, 1);
+          var c = document.createElement('canvas');
+          c.width  = Math.round(img.width  * ratio);
+          c.height = Math.round(img.height * ratio);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          res(c.toDataURL('image/jpeg', 0.80));
         };
+        img.onerror = rej;
+        img.src = e.target.result;
+      };
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* ── render the multi-photo panel inside a subarea body ── */
+  function renderPhotoPanel(areaId, subId) {
+    var wrap = document.getElementById('mp-wrap-' + subId);
+    if (!wrap) return;
+    var photos = getPhotos(areaId, subId);
+
+    var html = '';
+
+    /* thumbnails grid */
+    if (photos.length) {
+      html += '<div class="mp-grid">';
+      photos.forEach(function (p, i) {
+        html += '<div class="mp-thumb">'
+          + '<img src="' + p.data + '" alt="foto">'
+          + (p.ai ? '<div class="mp-ai-badge">🤖 IA</div>' : '')
+          + '<button class="mp-del-btn" title="Eliminar" onclick="_mpDel(\'' + areaId + '\',\'' + subId + '\',' + i + ')">✕</button>'
+          + '</div>';
+      });
+      html += '</div>';
+      html += '<div style="font-size:10px;color:var(--success);margin-bottom:8px">✅ ' + photos.length + ' foto' + (photos.length>1?'s':'') + ' adjunta' + (photos.length>1?'s':'') + '</div>';
+    }
+
+    /* upload row */
+    html += '<div class="mp-upload-row">'
+      /* gallery / multi-file */
+      + '<label class="mp-btn-label" for="mp-gallery-' + subId + '">🖼️ Galería</label>'
+      + '<input id="mp-gallery-' + subId + '" type="file" accept="image/*" multiple style="display:none" onchange="_mpAdd(\'' + areaId + '\',\'' + subId + '\',this)">'
+      /* camera capture */
+      + '<label class="mp-btn-label" for="mp-camera-' + subId + '">📷 Cámara</label>'
+      + '<input id="mp-camera-' + subId + '" type="file" accept="image/*" capture="environment" style="display:none" onchange="_mpAdd(\'' + areaId + '\',\'' + subId + '\',this)">'
+      /* analyze */
+      + (photos.length
+          ? '<button class="mp-analyze-btn" id="mp-ai-btn-' + subId + '" onclick="_mpAnalyzeAll(\'' + areaId + '\',\'' + subId + '\')">🤖 Analizar con IA (' + photos.length + ')</button>'
+          : '')
+      + '</div>';
+
+    /* AI results */
+    if (photos.some(function(p){ return p.ai; })) {
+      html += '<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">';
+      photos.forEach(function (p, i) {
+        if (!p.ai) return;
+        var ai = p.ai;
+        html += '<div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:10px;font-size:12px;line-height:1.5">';
+        html += '<b>🖼️ Foto ' + (i+1) + '</b><br>';
+        if (ai.descripcion) html += '<b>Descripción:</b> ' + ai.descripcion + '<br>';
+        if (ai.severidad)   html += '<b>Severidad:</b> '   + ai.severidad   + '<br>';
+        if (ai.causa)       html += '<b>Causa:</b> '       + ai.causa       + '<br>';
+        if (ai.accion)      html += '<b>Acción:</b> '      + ai.accion      + '<br>';
+        if (ai.tarea_sugerida) html += '<b>Tarea:</b> '   + ai.tarea_sugerida;
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    wrap.innerHTML = html;
+  }
+
+  /* ── global callbacks (called from inline onclick) ── */
+  window._mpDel = function (areaId, subId, idx) {
+    var photos = getPhotos(areaId, subId);
+    photos.splice(idx, 1);
+    setSyncLegacy(areaId, subId);
+    renderPhotoPanel(areaId, subId);
+    if (typeof autoSave === 'function') autoSave();
+  };
+
+  window._mpAdd = function (areaId, subId, input) {
+    var files = Array.from(input.files || []);
+    if (!files.length) return;
+    var photos = getPhotos(areaId, subId);
+    var chain  = Promise.resolve();
+    files.forEach(function (file) {
+      chain = chain.then(function () {
+        return resizeFile(file).then(function (data) {
+          photos.push({ data: data, name: file.name || 'foto.jpg', ai: null });
+        });
+      });
+    });
+    chain.then(function () {
+      setSyncLegacy(areaId, subId);
+      renderPhotoPanel(areaId, subId);
+      if (typeof autoSave === 'function') autoSave();
+      if (typeof showToast === 'function')
+        showToast('📸 ' + files.length + ' foto' + (files.length>1?'s':'') + ' agregada' + (files.length>1?'s':''));
+      input.value = '';
+    }).catch(function (e) {
+      console.error('[MultiPhoto] add error', e);
+    });
+  };
+
+  window._mpAnalyzeAll = function (areaId, subId) {
+    var WEBHOOK = 'https://hook.us2.make.com/q13o8ed41sh4j7rmx3j3q8yjpfgmd4gq';
+    var photos  = getPhotos(areaId, subId);
+    if (!photos.length) return;
+
+    var btn = document.getElementById('mp-ai-btn-' + subId);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Analizando…'; }
+    if (typeof showToast === 'function') showToast('🤖 Analizando ' + photos.length + ' foto' + (photos.length>1?'s':'') + '…');
+
+    var areasDefs = typeof AREA_DEFS !== 'undefined' ? AREA_DEFS : [];
+    var areaDef   = areasDefs.find(function(a){ return a.id===areaId; });
+    var subDef    = areaDef ? areaDef.subareas.find(function(s){ return s.id===subId; }) : null;
+
+    var chain = Promise.resolve();
+    photos.forEach(function (p, i) {
+      chain = chain.then(function () {
+        /* convert base64 data-URL to Blob */
+        var arr    = p.data.split(',');
+        var mime   = arr[0].match(/:(.*?);/)[1];
+        var bstr   = atob(arr[1]);
+        var n      = bstr.length;
+        var u8arr  = new Uint8Array(n);
+        while (n--) u8arr[n] = bstr.charCodeAt(n);
+        var blob   = new Blob([u8arr], { type: mime });
+
+        var fd = new FormData();
+        fd.append('photo',         blob, p.name || 'foto.jpg');
+        fd.append('building',      (window.state && state.building) || '');
+        fd.append('floor',         (window.state && state.floor)    || '');
+        fd.append('audit_type',    (window.state && state.type)     || '');
+        fd.append('area_id',       areaId);
+        fd.append('area_name',     areaDef ? areaDef.name : areaId);
+        fd.append('subarea_id',    subId);
+        fd.append('subarea_name',  subDef  ? subDef.name  : subId);
+        fd.append('checks',        JSON.stringify(subDef ? subDef.checks : []));
+        fd.append('photo_index',   String(i+1));
+        fd.append('total_photos',  String(photos.length));
+        fd.append('instruction',   'Analiza la foto como auditor profesional de limpieza y mantenimiento. Devuelve JSON con descripcion, severidad, causa, accion, informe, tarea_sugerida y prioridad. Sé específico y útil para que el personal pueda corregir el hallazgo.');
+
+        return fetch(WEBHOOK, { method: 'POST', body: fd })
+          .then(function(r){ return r.text(); })
+          .then(function(raw){
+            var payload;
+            try { payload = JSON.parse(raw); } catch(e) { payload = { descripcion: raw, informe: raw }; }
+            /* normalize */
+            var ai = {
+              descripcion:   payload.descripcion   || payload.description || payload.analysis || '',
+              severidad:     payload.severidad     || payload.severity    || '',
+              causa:         payload.causa         || payload.cause       || '',
+              accion:        payload.accion        || payload.action      || payload.accion_correctiva || '',
+              informe:       payload.informe       || payload.reportText  || '',
+              tarea_sugerida:payload.tarea_sugerida|| payload.tarea       || payload.task    || '',
+              prioridad:     payload.prioridad     || payload.priority    || 'normal'
+            };
+            photos[i].ai = ai;
+
+            /* inject task if not already present */
+            var sub = state.areas[areaId].subareas[subId];
+            var taskText = [ai.descripcion, ai.causa?'Causa: '+ai.causa:'', ai.accion?'Acción: '+ai.accion:''].filter(Boolean).join(' | ') || ai.informe || 'Revisar hallazgo detectado por IA (foto '+(i+1)+').';
+            var priority = (ai.prioridad==='urgente' || (ai.severidad||'').toLowerCase().includes('alt')) ? 'urgente' : 'normal';
+            var existIdx = sub.tasks.findIndex(function(t){ return t.source==='IA foto '+(i+1); });
+            var taskObj  = { text: taskText.substring(0,200), priority: priority, source: 'IA foto '+(i+1), ai: ai };
+            if (existIdx >= 0) sub.tasks[existIdx] = taskObj; else sub.tasks.push(taskObj);
+
+            /* update comment with first photo's analysis */
+            if (i===0 && ai.informe) sub.comment = ai.informe;
+            setSyncLegacy(areaId, subId);
+            if (typeof autoSave === 'function') autoSave();
+            renderPhotoPanel(areaId, subId);
+          })
+          .catch(function(e){
+            console.error('[MultiPhoto] AI error photo '+(i+1), e);
+          });
+      });
+    });
+
+    chain.then(function(){
+      if (typeof showToast === 'function') showToast('✅ Análisis completado para todas las fotos');
+    });
+  };
+
+  /* ── inject photo panels after renderArea runs ── */
+  function patchPhotoPanels() {
+    if (!window.state || !state.selectedAreas || !state.areas) return;
+    var areaId = state.selectedAreas[state.currentAreaIdx || 0];
+    if (!areaId || !state.areas[areaId]) return;
+    var areaDef = typeof AREA_DEFS !== 'undefined' ? AREA_DEFS.find(function(a){return a.id===areaId;}) : null;
+    if (!areaDef) return;
+
+    areaDef.subareas.forEach(function (sub) {
+      /* find the existing photo section – look for the FOTO / EVIDENCIA label div */
+      var subBody = document.getElementById('body-' + sub.id);
+      if (!subBody) return;
+
+      /* if we already injected, just re-render */
+      if (document.getElementById('mp-wrap-' + sub.id)) {
+        renderPhotoPanel(areaId, sub.id);
+        return;
       }
-    }, 300);
+
+      /* find the original photo container (it has the file input ai-photo-*) */
+      var origInput = document.getElementById('ai-photo-' + areaId + '-' + sub.id);
+      if (!origInput) return;
+
+      /* get the enclosing box (3 levels up from input: input → flex div → outer box) */
+      var box = origInput.closest('div[style*="background:var(--surface2)"]') || origInput.parentElement && origInput.parentElement.parentElement;
+      if (!box) return;
+
+      /* replace the whole box content with our multi-photo panel */
+      box.innerHTML = '<div id="mp-wrap-' + sub.id + '"></div>';
+
+      /* migrate any existing single photo into photos array */
+      getPhotos(areaId, sub.id);  /* triggers migration */
+      renderPhotoPanel(areaId, sub.id);
+    });
+  }
+
+  function hookRenderArea() {
+    var orig = window.renderArea;
+    if (typeof orig !== 'function') return false;
+    window.renderArea = function () {
+      orig.apply(this, arguments);
+      setTimeout(patchPhotoPanels, 0);
+    };
+    return true;
+  }
+  if (!hookRenderArea()) {
+    var t2 = setInterval(function(){ if (hookRenderArea()) clearInterval(t2); }, 400);
   }
 })();
 </script>

@@ -1188,6 +1188,21 @@ document.head.appendChild(_s);
     syncState(aId,sId); refreshGrid(aId,sId);
     if(typeof autoSave==='function') autoSave();
   };
+
+  /* Sembrar fotos demo sin usar input de archivos */
+  window._mpSeed=function(aId,sId,items){
+    var ph=getPhotos(aId,sId);
+    ph.length=0;
+    (items||[]).forEach(function(it,idx){
+      ph.push({
+        data:it.data,
+        name:it.name||('demo_'+(idx+1)+'.jpg'),
+        ai:it.ai||null
+      });
+    });
+    syncState(aId,sId);
+    refreshGrid(aId,sId);
+  };
   window._mpAdd=function(aId,sId,inp){
     var files=Array.from(inp.files||[]); if(!files.length) return;
     var ph=getPhotos(aId,sId); var chain=Promise.resolve();
@@ -1529,5 +1544,311 @@ document.head.appendChild(_s);
   if(!hookSum()){var _t5=setInterval(function(){if(hookSum())clearInterval(_t5);},350);}
 })();
 </script>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   DEMO PROFESIONAL — auditoría viva + historial + guía
+   ══════════════════════════════════════════════════════════ */
+(function(){
+  function esc(s){return String(s||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function today(){return new Date().toISOString().slice(0,10);}
+  function daysAgo(n){var d=new Date();d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);}
+  function demoPhoto(title,subtitle,kind){
+    var c=document.createElement('canvas');c.width=900;c.height=620;
+    var x=c.getContext('2d');
+    var g=x.createLinearGradient(0,0,900,620);
+    var palettes={
+      good:['#16251d','#2d8a4a','#b7f7c7'], warn:['#291f12','#d68b24','#ffe4ad'], bad:['#2a1416','#c84141','#ffd2d2'], blue:['#111e33','#3276d1','#d9e9ff']
+    };
+    var p=palettes[kind]||palettes.blue;
+    g.addColorStop(0,p[0]);g.addColorStop(.62,p[1]);g.addColorStop(1,p[2]);
+    x.fillStyle=g;x.fillRect(0,0,900,620);
+    x.fillStyle='rgba(0,0,0,.38)';x.fillRect(42,380,816,178);
+    x.fillStyle='rgba(255,255,255,.13)';
+    for(var i=0;i<7;i++){x.fillRect(65+i*115,65,82,240+((i%2)*60));}
+    x.fillStyle='rgba(255,255,255,.18)';x.fillRect(70,120,760,14);x.fillRect(70,170,690,10);x.fillRect(70,235,600,9);
+    x.strokeStyle='rgba(255,255,255,.32)';x.lineWidth=7;x.strokeRect(36,36,828,548);
+    x.fillStyle='#fff';x.font='bold 42px Inter, Arial';x.fillText(title,70,435);
+    x.fillStyle='rgba(255,255,255,.86)';x.font='26px Inter, Arial';wrap(x,subtitle,70,478,760,33);
+    x.fillStyle='rgba(255,255,255,.65)';x.font='18px Arial';x.fillText('AuditPro · Imagen demo simulada',70,540);
+    return c.toDataURL('image/jpeg',.82);
+  }
+  function wrap(ctx,text,x,y,maxWidth,lineHeight){
+    var words=String(text||'').split(' '),line='';
+    for(var n=0;n<words.length;n++){
+      var test=line+words[n]+' ';
+      if(ctx.measureText(test).width>maxWidth&&n>0){ctx.fillText(line,x,y);line=words[n]+' ';y+=lineHeight;}else line=test;
+    }
+    ctx.fillText(line,x,y);
+  }
+  function sub(score,comment,tasks,ai){return {score:score,comment:comment||'',tasks:tasks||[],photo:null,photoName:'',ai_analysis:ai||null};}
+  function demoAudit(date,building,floor,avgShift){
+    return {
+      building:building, floor:floor, auditor:'Demo Auditor', date:date, type:'Rutinaria', supervisorEmail:'supervisor.demo@empresa.com',
+      selectedAreas:['lobby','halls','bathrooms','offices'], currentAreaIdx:0,
+      areas:{
+        lobby:{score:4.8,comment:'Lobby con presentación ejecutiva, alto estándar visual y buena percepción de entrada.',subareas:{
+          floor_lobby:sub(5,'Piso brillante, sin manchas ni marcas visibles.'),
+          glass_lobby:sub(4.5,'Vidrios limpios; leve marca en puerta lateral.'),
+          furniture_lobby:sub(5,'Mobiliario ordenado y sin polvo.'),
+          walls_lobby:sub(5,'Paredes y esquinas sin suciedad visible.')
+        }},
+        halls:{score:3.8,comment:'Pasillos funcionales; escaleras y basureros requieren seguimiento.',subareas:{
+          floor_hall:sub(4.5,'Piso limpio y libre de derrames.'),
+          stairs:sub(2.5,'Acumulación visible de polvo en bordes y pasamanos.',[{text:'Limpiar escalones, bordes y pasamanos antes de finalizar el turno.',priority:'urgente',source:'demo'}],{descripcion:'Se observa acumulación de polvo en los bordes de los escalones y contacto frecuente en pasamanos.',severidad:'Alta',causa:'Frecuencia insuficiente de limpieza en área de alto tránsito.',accion:'Reforzar limpieza de escaleras y validar con foto de cierre.',informe:'Escaleras con acumulación de polvo en bordes y pasamanos. Requiere atención inmediata por percepción de servicio y seguridad.',tarea_sugerida:'Limpieza profunda de escaleras y pasamanos.',prioridad:'urgente'}),
+          walls_hall:sub(4,'Paredes aceptables, con roces menores.'),
+          bins_hall:sub(3.5,'Basureros operativos; uno con bolsa mal colocada.',[{text:'Revisar colocación de bolsas en basureros del pasillo central.',priority:'normal',source:'demo'}])
+        }},
+        bathrooms:{score:3.7,comment:'Baños limpios en general, pero suministros y piso necesitan control durante el día.',subareas:{
+          wc:sub(4,'Inodoros limpios, sin olor perceptible.'),
+          sink:sub(4.5,'Lavamanos y grifería en buen estado.'),
+          floor_bath:sub(3,'Piso con humedad leve cerca de lavamanos.',[{text:'Secar piso y revisar posible fuga o exceso de salpicadura.',priority:'normal',source:'demo'}],{descripcion:'Se aprecia humedad leve en el piso cerca del lavamanos.',severidad:'Media',causa:'Salpicadura frecuente o rutina de secado insuficiente.',accion:'Secar el área y reforzar rondas durante horas pico.',informe:'Piso de baño con humedad leve en zona de lavamanos. Se recomienda secado inmediato y seguimiento durante el día.',tarea_sugerida:'Secar piso y validar condición en próxima ronda.',prioridad:'normal'}),
+          mirror:sub(5,'Espejos limpios, sin salpicaduras.'),
+          supplies:sub(2.5,'Nivel bajo de papel y toalla en dispensadores.',[{text:'Reabastecer papel higiénico, toalla y validar jabón en todos los cubículos.',priority:'urgente',source:'demo'}],{descripcion:'Dispensadores con suministros bajos, especialmente papel y toalla.',severidad:'Alta',causa:'Reposición no realizada antes del pico de uso.',accion:'Reabastecer de inmediato y registrar control de suministro.',informe:'Suministros sanitarios en nivel bajo. Requiere reposición inmediata para evitar quejas de usuarios.',tarea_sugerida:'Reabastecer dispensadores y confirmar con evidencia.',prioridad:'urgente'}),
+          walls_bath:sub(4,'Paredes y divisiones limpias.')
+        }},
+        offices:{score:4.5,comment:'Oficinas bien mantenidas; alfombra requiere limpieza programada.',subareas:{
+          desk:sub(5,'Escritorios despejados y sin polvo visible.'),
+          floor_off:sub(4.5,'Piso aspirado y ordenado.'),
+          partitions:sub(4.5,'Mamparas limpias con marcas menores.'),
+          equip:sub(5,'Equipos visibles limpios.'),
+          trash_off:sub(4,'Papeleros vaciados y con bolsa.'),
+          carpet_off:sub(3.5,'Alfombra con pelusa acumulada en bordes.',[{text:'Programar limpieza profunda de alfombra en zona de cubículos.',priority:'normal',source:'demo'}])
+        }}
+      }
+    };
+  }
+  function seedHistory(mainState){
+    var samples=[
+      {id:'DEMO_actual',ts:Date.now(),state:JSON.parse(JSON.stringify(mainState))},
+      {id:'DEMO_semana_anterior',ts:Date.now()-86400000*7,state:demoAudit(daysAgo(7),'Torre Empresarial Demo','Piso 2',0)},
+      {id:'DEMO_mck',ts:Date.now()-86400000*16,state:demoAudit(daysAgo(16),'Cliente Corporativo Demo','Lobby + Oficinas',0)},
+      {id:'DEMO_bayer',ts:Date.now()-86400000*28,state:demoAudit(daysAgo(28),'Planta Regulada Demo','Áreas comunes',0)}
+    ];
+    try{
+      var current=JSON.parse(localStorage.getItem('auditpro_saves')||'[]').filter(function(x){return !/^DEMO_/.test(x.id||'');});
+      localStorage.setItem('auditpro_saves',JSON.stringify(samples.concat(current).slice(0,30)));
+    }catch(e){localStorage.setItem('auditpro_saves',JSON.stringify(samples));}
+  }
+  function hideAllScreens(){['screen-setup','screen-home','screen-audit','screen-summary','screen-supervisor','screen-admin','screen-dashboard'].forEach(function(id){var e=document.getElementById(id);if(e)e.style.display='none';});}
+  function addDemoGuide(){
+    if(document.getElementById('demo-guide-box')) return;
+    var main=document.getElementById('main-content'); if(!main) return;
+    var box=document.createElement('div'); box.id='demo-guide-box';
+    box.style.cssText='background:linear-gradient(135deg,rgba(59,130,246,.16),rgba(244,167,42,.10));border:1px solid rgba(59,130,246,.35);border-radius:14px;padding:15px 18px;margin-bottom:16px;font-size:12px;line-height:1.45;color:var(--text)';
+    box.innerHTML='<div style="font-family:Syne,sans-serif;font-weight:800;color:#60a5fa;margin-bottom:6px">👋 Modo demo profesional activado</div><div>Esta auditoría viene precargada con calificaciones, hallazgos, tareas y evidencia multifoto. Puedes entrar a <b>Volver a revisar</b>, abrir Baños o Pasillos, ver las miniaturas y probar el flujo de IA sin afectar datos reales.</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-outline btn-xs" onclick="returnToAudit()">🔎 Ver auditoría cargada</button><button class="btn btn-outline btn-xs" onclick="showDashboard()">📊 Ver dashboard demo</button><button class="btn btn-outline btn-xs" onclick="loadHistory()">📂 Ver historial demo</button></div>';
+    main.insertBefore(box,main.firstChild);
+  }
+  function seedPhotos(){
+    if(typeof window._mpSeed!=='function') return;
+    var bath1=demoPhoto('Baño · Piso húmedo','Evidencia simulada: humedad leve cerca de lavamanos','warn');
+    var bath2=demoPhoto('Baño · Suministros bajos','Evidencia simulada: dispensador con papel bajo','bad');
+    var stair1=demoPhoto('Escaleras · Polvo visible','Evidencia simulada: acumulación en bordes','bad');
+    var stair2=demoPhoto('Pasamanos · Contacto frecuente','Evidencia simulada: requiere repaso de limpieza','warn');
+    var lobby1=demoPhoto('Lobby · Buena presentación','Evidencia simulada: área en excelente estado','good');
+    var office1=demoPhoto('Oficinas · Alfombra','Evidencia simulada: limpieza programada requerida','blue');
+    window._mpSeed('bathrooms','floor_bath',[{data:bath1,name:'demo_bano_piso.jpg',ai:state.areas.bathrooms.subareas.floor_bath.ai_analysis}]);
+    window._mpSeed('bathrooms','supplies',[{data:bath2,name:'demo_suministros.jpg',ai:state.areas.bathrooms.subareas.supplies.ai_analysis}]);
+    window._mpSeed('halls','stairs',[{data:stair1,name:'demo_escaleras_1.jpg',ai:state.areas.halls.subareas.stairs.ai_analysis},{data:stair2,name:'demo_escaleras_2.jpg',ai:state.areas.halls.subareas.stairs.ai_analysis}]);
+    window._mpSeed('lobby','floor_lobby',[{data:lobby1,name:'demo_lobby.jpg',ai:null}]);
+    window._mpSeed('offices','carpet_off',[{data:office1,name:'demo_alfombra.jpg',ai:null}]);
+  }
+  window.enterDemo=function(){
+    var auth=document.getElementById('auth-overlay'); if(auth) auth.style.display='none';
+    var lock=document.getElementById('btn-lock-session'); if(lock) lock.style.display='';
+    var badge=document.getElementById('role-badge');
+    if(badge){badge.textContent='DEMO PRO';badge.style.display='inline-block';badge.style.background='rgba(59,130,246,0.15)';badge.style.color='#60a5fa';badge.style.border='1px solid rgba(59,130,246,0.3)';}
+    try{sessionStorage.setItem('auditpro_auth','1');}catch(e){}
+    state=demoAudit(today(),'Torre Empresarial Demo','Piso 3 · Auditoría ejecutiva',0);
+    seedHistory(state);
+    hideAllScreens();
+    var hdr=document.getElementById('hdr-building'); if(hdr) hdr.textContent='— '+state.building+' · Demo Pro';
+    var hd=document.getElementById('hdr-date'); if(hd && typeof formatDate==='function') hd.textContent=formatDate(state.date);
+    var bk=document.getElementById('btn-back-setup'); if(bk) bk.style.display='';
+    var side=document.getElementById('sidebar'); if(side) side.classList.add('visible');
+    if(typeof renderSidebar==='function') renderSidebar();
+    if(typeof showSummary==='function') showSummary(); else {var sum=document.getElementById('screen-summary'); if(sum) sum.style.display='block';}
+    addDemoGuide();
+    setTimeout(function(){
+      try{state.currentAreaIdx=2; if(typeof renderArea==='function') renderArea(); seedPhotos(); state.currentAreaIdx=0; if(typeof renderSidebar==='function') renderSidebar(); if(typeof showSummary==='function') showSummary(); addDemoGuide();}catch(e){console.warn('[Demo Pro seed]',e);}
+    },350);
+    if(typeof showToast==='function') showToast('✅ Demo profesional cargado con auditoría, historial, fotos y hallazgos');
+  };
+})();
+</script>
+
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   DEMO SANDBOX SEGURO — no Supabase, no Make, no historial real
+   ══════════════════════════════════════════════════════════ */
+(function(){
+  var REAL_GET = Storage.prototype.getItem;
+  var REAL_SET = Storage.prototype.setItem;
+  var REAL_REMOVE = Storage.prototype.removeItem;
+  var REAL_FETCH = window.fetch ? window.fetch.bind(window) : null;
+  var demoMemory = Object.create(null);
+  demoMemory.auditpro_saves = '[]';
+
+  function isDemo(){ return window.AUDITPRO_DEMO_SANDBOX === true; }
+  window.isAuditProDemoSandbox = isDemo;
+
+  function demoToast(msg){
+    if(typeof showToast === 'function') showToast(msg);
+    else console.log('[AuditPro Demo]', msg);
+  }
+
+  /* Redirigir historial local SOLO durante demo */
+  Storage.prototype.getItem = function(key){
+    if(isDemo() && key === 'auditpro_saves') return demoMemory.auditpro_saves || '[]';
+    return REAL_GET.call(this,key);
+  };
+  Storage.prototype.setItem = function(key,value){
+    if(isDemo() && key === 'auditpro_saves'){
+      demoMemory.auditpro_saves = String(value || '[]');
+      return;
+    }
+    return REAL_SET.call(this,key,value);
+  };
+  Storage.prototype.removeItem = function(key){
+    if(isDemo() && key === 'auditpro_saves'){
+      demoMemory.auditpro_saves = '[]';
+      return;
+    }
+    return REAL_REMOVE.call(this,key);
+  };
+
+  /* Bloquear llamadas externas durante demo: Supabase, Make, webhooks */
+  if(REAL_FETCH){
+    window.fetch = function(input, init){
+      var url = '';
+      try{ url = typeof input === 'string' ? input : (input && input.url) || ''; }catch(e){}
+      if(isDemo() && /supabase\.co|hook\.us\d*\.make\.com|make\.com/i.test(url)){
+        console.warn('[DEMO SANDBOX] Bloqueada llamada externa:', url);
+        demoToast('🔒 Modo demo: acción simulada, no se enviaron datos reales.');
+        return Promise.resolve(new Response(JSON.stringify({
+          demo:true,
+          blocked:true,
+          descripcion:'Análisis demo generado sin enviar la foto fuera de la app.',
+          severidad:'Demo',
+          causa:'Modo sandbox activo.',
+          accion:'Explorar la función sin guardar ni enviar información real.',
+          informe:'Modo demo: este análisis es simulado y no afecta datos reales.',
+          tarea_sugerida:'Continuar explorando la auditoría demo.',
+          prioridad:'normal'
+        }),{status:200,headers:{'Content-Type':'application/json'}}));
+      }
+      return REAL_FETCH(input, init);
+    };
+  }
+
+  function sandboxBanner(){
+    if(!isDemo()) return;
+    var main = document.getElementById('main-content');
+    if(!main || document.getElementById('demo-sandbox-banner')) return;
+    var box = document.createElement('div');
+    box.id = 'demo-sandbox-banner';
+    box.style.cssText = 'background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.35);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;line-height:1.45;color:var(--text)';
+    box.innerHTML = '<b style="color:var(--success)">🔒 Demo seguro / sandbox</b><br>Podés navegar, revisar auditorías, ver dashboard, probar fotos y generar reportes demo. Nada se guarda en Supabase, nada se envía a Make y no se modifica el historial real.';
+    main.insertBefore(box, main.firstChild);
+  }
+
+  /* Simular IA multifoto sin llamar webhook */
+  function installDemoAnalyzer(){
+    if(typeof window._mpAnalyze !== 'function' || window._mpAnalyze._sandboxWrapped) return;
+    var realAnalyze = window._mpAnalyze;
+    window._mpAnalyze = function(aId,sId){
+      if(!isDemo()) return realAnalyze.apply(this, arguments);
+      var ph = [];
+      try{
+        var sub = state && state.areas && state.areas[aId] && state.areas[aId].subareas && state.areas[aId].subareas[sId];
+        ph = (sub && (sub.photos || [])) || [];
+        if(!ph.length && sub && sub.photo) ph = [{data:sub.photo,name:sub.photoName || 'foto_demo.jpg'}];
+        if(!ph.length){ demoToast('⚠️ Demo: primero agregá o abrí una subárea con fotos.'); return; }
+        ph.forEach(function(p,i){
+          var ai = p.ai || sub.ai_analysis || {
+            descripcion:'Foto demo revisada. Se observan condiciones generales del área y posibles puntos de mejora.',
+            severidad: sub.score && sub.score < 3 ? 'Alta' : (sub.score && sub.score < 4 ? 'Media' : 'Baja'),
+            causa:'Análisis simulado en modo demo seguro.',
+            accion:'Validar el hallazgo, registrar evidencia y dar seguimiento según prioridad.',
+            informe:'Análisis IA demo: evidencia revisada sin enviar datos fuera de la aplicación.',
+            tarea_sugerida:'Registrar seguimiento preventivo del área.',
+            prioridad: sub.score && sub.score < 3 ? 'urgente' : 'normal'
+          };
+          p.ai = ai;
+          var src = 'IA-demo-foto-' + (i+1);
+          sub.tasks = sub.tasks || [];
+          if(!sub.tasks.some(function(t){return t.source === src;})){
+            sub.tasks.push({text:(ai.tarea_sugerida || ai.accion || 'Seguimiento demo').substring(0,200),priority:ai.prioridad || 'normal',source:src,ai:ai});
+          }
+          if(i === 0 && ai.informe) sub.comment = ai.informe;
+        });
+        sub.photos = ph;
+        if(typeof refreshGrid === 'function') refreshGrid(aId,sId);
+        var resDiv = document.getElementById('ai-result-'+aId+'-'+sId);
+        if(resDiv){
+          resDiv.style.display='block';
+          resDiv.innerHTML = ph.map(function(p,i){
+            var ai=p.ai||{};
+            return '<b>🖼️ Foto '+(i+1)+' — Demo seguro</b><br>'+
+              (ai.descripcion?'<b>Descripción:</b> '+ai.descripcion+'<br>':'')+
+              (ai.severidad?'<b>Severidad:</b> '+ai.severidad+'<br>':'')+
+              (ai.accion?'<b>Acción:</b> '+ai.accion+'<br>':'')+
+              (ai.tarea_sugerida?'<b>Tarea:</b> '+ai.tarea_sugerida:'');
+          }).join('<hr style="border-color:var(--border);margin:8px 0">');
+        }
+        if(typeof autoSave === 'function') autoSave();
+        demoToast('✅ Análisis IA demo generado sin enviar fotos ni guardar datos reales.');
+      }catch(e){ console.error('[DEMO SANDBOX analyzer]',e); demoToast('⚠️ No se pudo simular el análisis demo.'); }
+    };
+    window._mpAnalyze._sandboxWrapped = true;
+  }
+
+  function disableRealActionsMessage(){
+    if(!isDemo()) return false;
+    demoToast('🔒 Modo demo: esta acción no modifica datos reales.');
+    return true;
+  }
+
+  /* Envolver funciones expuestas, si existen */
+  function wrapExternalActions(){
+    ['saveAuditToSupabase','sendUrgentNotifications','notifyUrgentFindings','adminSaveUser','adminSaveWebhook'].forEach(function(name){
+      var fn = window[name];
+      if(typeof fn === 'function' && !fn._sandboxWrapped){
+        window[name] = function(){ if(isDemo()) return disableRealActionsMessage(); return fn.apply(this, arguments); };
+        window[name]._sandboxWrapped = true;
+      }
+    });
+    installDemoAnalyzer();
+  }
+
+  var oldEnterDemo = window.enterDemo;
+  if(typeof oldEnterDemo === 'function'){
+    window.enterDemo = function(){
+      window.AUDITPRO_DEMO_SANDBOX = true;
+      demoMemory.auditpro_saves = '[]';
+      var result = oldEnterDemo.apply(this, arguments);
+      setTimeout(function(){ sandboxBanner(); wrapExternalActions(); }, 80);
+      setTimeout(function(){ sandboxBanner(); wrapExternalActions(); }, 700);
+      return result;
+    };
+  }
+
+  /* Si se vuelve a login real, salir de demo */
+  var oldHandleLogin = window.handleLogin;
+  if(typeof oldHandleLogin === 'function'){
+    window.handleLogin = function(){
+      window.AUDITPRO_DEMO_SANDBOX = false;
+      return oldHandleLogin.apply(this, arguments);
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded',function(){
+    wrapExternalActions();
+    setInterval(function(){ if(isDemo()){ sandboxBanner(); wrapExternalActions(); } }, 1200);
+  });
+})();
+</script>
+
 </body>
 </html>

@@ -1908,5 +1908,372 @@ document.head.appendChild(_s);
 })();
 </script>
 
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   CLOUD HISTORY FIX — Supabase como fuente principal
+   Historial/Home/Dashboard sincronizados entre dispositivos
+   ══════════════════════════════════════════════════════════ */
+(function(){
+  const LOCAL_KEY = 'auditpro_saves';
+
+  function isDemo(){
+    try { return window.AUDITPRO_DEMO_SANDBOX === true || (typeof window.isAuditProDemoSandbox === 'function' && window.isAuditProDemoSandbox()); }
+    catch(e){ return false; }
+  }
+
+  function toast(msg, type){
+    if(typeof showToast === 'function') showToast(msg, type || undefined);
+    else console.log('[AuditPro Cloud]', msg);
+  }
+
+  function cloudReady(){
+    try { return !!_supabaseClient && !isDemo() && navigator.onLine; }
+    catch(e){ return false; }
+  }
+
+  function getUser(){
+    try { return currentUser || window.currentUser || {}; }
+    catch(e){ return {}; }
+  }
+
+  function cleanStateForCloud(st){
+    const copy = JSON.parse(JSON.stringify(st || {}));
+    Object.keys(copy.areas || {}).forEach(areaId => {
+      Object.keys((copy.areas[areaId] || {}).subareas || {}).forEach(subId => {
+        const sub = copy.areas[areaId].subareas[subId];
+        if(!sub) return;
+        delete sub.photo;
+        delete sub.photoName;
+        /* Mantiene multifotos/miniaturas si ya están optimizadas en dataURL;
+           si pesan demasiado, Supabase podría rechazar el registro. */
+      });
+    });
+    return copy;
+  }
+
+  function calcAverage(st){
+    let total = 0, count = 0;
+    try {
+      Object.values(st?.areas || {}).forEach(area => {
+        Object.values(area?.subareas || {}).forEach(sub => {
+          const n = parseFloat(sub?.score || 0);
+          if(n > 0){ total += n; count++; }
+        });
+      });
+    } catch(e) {}
+    return count ? total / count : 0;
+  }
+
+  function urgentCount(st){
+    let count = 0;
+    try {
+      Object.values(st?.areas || {}).forEach(area => {
+        Object.values(area?.subareas || {}).forEach(sub => {
+          (sub?.tasks || []).forEach(t => { if(t?.priority === 'urgente') count++; });
+        });
+      });
+    } catch(e) {}
+    return count;
+  }
+
+  function areaCount(st){
+    try { return (st?.selectedAreas || []).length || Object.keys(st?.areas || {}).length || 0; }
+    catch(e){ return 0; }
+  }
+
+  function fmt(n){
+    if(typeof fmtScore === 'function') return fmtScore(n);
+    return Number(n || 0).toFixed(2).replace(/\.00$/,'').replace(/0$/,'');
+  }
+
+  function rowToSave(row){
+    const st = row.state_json || {};
+    if(!st.building) st.building = row.building || '';
+    if(!st.floor) st.floor = row.floor || '';
+    if(!st.date) st.date = row.date || '';
+    if(!st.auditor) st.auditor = row.auditor_name || row.auditor_email || '';
+    if(!st.type) st.type = row.audit_type || '';
+    return {
+      id: row.id || row.created_at || `${st.building}_${st.date}`,
+      cloudId: row.id || null,
+      ts: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+      state: st,
+      cloudRow: row
+    };
+  }
+
+  async function fetchCloudAudits(limit){
+    if(!cloudReady()) throw new Error('Sin conexión a Supabase');
+    let q = _supabaseClient
+      .from('audits')
+      .select('*')
+      .eq('product', 'auditpro')
+      .order('created_at', { ascending:false })
+      .limit(limit || 100);
+
+    const user = getUser();
+    const role = user?.role || 'auditor';
+    if(role === 'auditor' && user?.email){
+      q = q.eq('auditor_email', String(user.email).toLowerCase());
+    }
+
+    const { data, error } = await q;
+    if(error) throw error;
+    return (data || []).map(rowToSave);
+  }
+
+  function getLocalSaves(){
+    try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'); }
+    catch(e){ return []; }
+  }
+
+  function setLocalSaves(saves){
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify((saves || []).slice(0,50))); }
+    catch(e){}
+  }
+
+  async function syncCurrentStateToSupabase(){
+    if(!cloudReady()) throw new Error('Sin conexión a Supabase');
+    const user = getUser();
+    const st = cleanStateForCloud(state);
+    const global = Math.round(calcAverage(st) * 100) / 100;
+    const payload = {
+      auditor_email: String(user?.email || st.auditorEmail || '').toLowerCase(),
+      auditor_name:  st.auditor || user?.display_name || user?.email || '—',
+      building:      st.building || '',
+      floor:         st.floor || '',
+      date:          st.date || new Date().toISOString().slice(0,10),
+      audit_type:    st.type || 'Rutinaria',
+      global_score:  global,
+      urgent_count:  urgentCount(st),
+      areas_count:   areaCount(st),
+      state_json:    st,
+      product:       'auditpro'
+    };
+
+    /* Evita duplicados: si existe una auditoría del mismo usuario/proyecto/piso/fecha/tipo, actualiza la más reciente. */
+    let existingId = null;
+    try {
+      let q = _supabaseClient.from('audits').select('id')
+        .eq('product','auditpro')
+        .eq('building', payload.building)
+        .eq('floor', payload.floor)
+        .eq('date', payload.date)
+        .eq('audit_type', payload.audit_type)
+        .order('created_at', {ascending:false})
+        .limit(1);
+      if(payload.auditor_email) q = q.eq('auditor_email', payload.auditor_email);
+      const res = await q;
+      if(!res.error && res.data && res.data[0] && res.data[0].id) existingId = res.data[0].id;
+    } catch(e) {}
+
+    const res = existingId
+      ? await _supabaseClient.from('audits').update(payload).eq('id', existingId).select().single()
+      : await _supabaseClient.from('audits').insert(payload).select().single();
+
+    if(res.error) throw res.error;
+    return res.data;
+  }
+
+  /* Guardado: local como respaldo + nube como fuente oficial */
+  function saveLocalBackup(){
+    try {
+      const st = cleanStateForCloud(state);
+      const id = `${st.building}_${st.floor || ''}_${st.date}_${st.type || ''}`.replace(/\s/g, '_');
+      const saves = getLocalSaves();
+      const idx = saves.findIndex(s => s.id === id);
+      const entry = { id, ts: Date.now(), state: st, localBackup:true };
+      if(idx >= 0) saves[idx] = entry; else saves.unshift(entry);
+      setLocalSaves(saves);
+    } catch(e) {}
+  }
+
+  window.saveAuditToSupabase = async function(){
+    if(isDemo()) return null;
+    const status = document.getElementById('cloud-save-status');
+    if(status){ status.className = 'saving'; status.innerHTML = '<span class="css-spin">⟳</span> &nbsp;Guardando en la nube…'; }
+    try {
+      const saved = await syncCurrentStateToSupabase();
+      if(status){
+        const ts = new Date().toLocaleTimeString('es-CR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        status.className = 'ok';
+        status.innerHTML = '☁️ ✅ Guardada en Supabase — ' + ts;
+      }
+      return saved;
+    } catch(e){
+      if(status){
+        status.className = 'error';
+        status.innerHTML = '❌ No se pudo guardar en la nube: ' + (e.message || 'error desconocido') + '<br>💾 Quedó respaldo local en este dispositivo.';
+      }
+      console.error('[AuditPro] Cloud save failed:', e);
+      throw e;
+    }
+  };
+
+  window.saveToHistory = function(){
+    saveLocalBackup();
+    if(!isDemo() && navigator.onLine){
+      window.saveAuditToSupabase().catch(() => {});
+    } else {
+      const status = document.getElementById('cloud-save-status');
+      if(status && !isDemo()){
+        status.className = 'local-only';
+        status.innerHTML = '⚠️ Sin internet — guardada solo como respaldo local.';
+      }
+    }
+  };
+
+  window.restoreAuditCloud = async function(i){
+    const saves = window._auditproCloudHistory || [];
+    const item = saves[i];
+    if(!item) return;
+    state = JSON.parse(JSON.stringify(item.state));
+    if(typeof showSummary === 'function') showSummary();
+    toast('✅ Auditoría cargada desde la nube');
+  };
+
+  window.deleteCloudAudit = async function(i){
+    const saves = window._auditproCloudHistory || [];
+    const item = saves[i];
+    if(!item) return;
+    if(!confirm('¿Eliminar esta auditoría del historial en la nube?')) return;
+    try {
+      if(item.cloudId && cloudReady()){
+        const { error } = await _supabaseClient.from('audits').delete().eq('id', item.cloudId);
+        if(error) throw error;
+      }
+      toast('🗑️ Auditoría eliminada');
+      window.loadHistory(true);
+    } catch(e){
+      toast('❌ No se pudo eliminar: ' + (e.message || 'error'), 'warning');
+    }
+  };
+
+  function renderHistoryList(saves, sourceLabel){
+    const list = document.getElementById('history-list');
+    if(!list) return;
+    if(!saves.length){
+      list.innerHTML = '<div class="empty-state"><div class="ei">📂</div><div>Sin auditorías guardadas</div></div>';
+      return;
+    }
+    list.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">' + sourceLabel + '</div>' +
+      saves.map((s, i) => {
+        const st = s.state || {};
+        const avgVal = s.cloudRow?.global_score || calcAverage(st);
+        const avg = avgVal > 0 ? fmt(avgVal) : '—';
+        const d = st.date ? (typeof formatDate === 'function' ? formatDate(st.date) : st.date) : '—';
+        const cloudMark = s.cloudId ? '☁️' : '💾';
+        return `<div class="task-item" style="margin-bottom:8px">
+          <div style="flex:1">
+            <div style="font-weight:600">${cloudMark} ${st.building || '—'} ${st.floor ? '· ' + st.floor : ''}</div>
+            <div style="font-size:11px;color:var(--muted)">${d} · ${st.auditor || s.cloudRow?.auditor_name || '—'} · ${st.type || s.cloudRow?.audit_type || '—'}</div>
+          </div>
+          <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--accent);margin-right:12px">${avg}</div>
+          <button class="btn btn-outline btn-xs" onclick="restoreAuditCloud(${i})">Ver</button>
+          <button class="btn btn-xs btn-danger" onclick="deleteCloudAudit(${i})">×</button>
+        </div>`;
+      }).join('');
+  }
+
+  window.loadHistory = async function(forceOpen){
+    const sec = document.getElementById('history-section');
+    if(!sec) return;
+    if(forceOpen === true) sec.style.display = 'block';
+    else sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+    if(sec.style.display === 'none') return;
+
+    const title = sec.querySelector('.tasks-summary-title');
+    if(title) title.textContent = '📂 Auditorías Guardadas en la Nube';
+    const list = document.getElementById('history-list');
+    if(list) list.innerHTML = '<div style="color:var(--muted);padding:14px">⏳ Cargando historial desde Supabase...</div>';
+
+    if(isDemo()){
+      const demoSaves = getLocalSaves();
+      window._auditproCloudHistory = demoSaves;
+      renderHistoryList(demoSaves, '🔒 Modo demo: historial ficticio sandbox');
+      return;
+    }
+
+    try {
+      const saves = await fetchCloudAudits(100);
+      window._auditproCloudHistory = saves;
+      renderHistoryList(saves, '☁️ Fuente: Supabase. Este historial debe verse igual desde tablet, teléfono y computadora.');
+      /* Refresca respaldo local con lo último de la nube */
+      setLocalSaves(saves.map(s => ({id:s.id, ts:s.ts, state:s.state, cloudId:s.cloudId})));
+    } catch(e){
+      const local = getLocalSaves();
+      window._auditproCloudHistory = local;
+      renderHistoryList(local, '⚠️ No se pudo leer Supabase. Mostrando respaldo local de este dispositivo.');
+    }
+  };
+
+  async function renderHomeRecentFromCloud(){
+    const el = document.getElementById('home-recent-list');
+    if(!el) return;
+    const descs = document.querySelectorAll('.home-card-desc, .home-section-title');
+    descs.forEach(x => {
+      if((x.textContent || '').includes('esta tablet')) x.textContent = x.textContent.replace('esta tablet','la nube');
+    });
+    el.innerHTML = '<div class="home-empty">⏳ Cargando auditorías de la nube…</div>';
+    try {
+      const saves = isDemo() ? getLocalSaves() : await fetchCloudAudits(6);
+      if(!saves.length){ el.innerHTML = '<div class="home-empty">📋 Aún no hay auditorías guardadas en la nube</div>'; return; }
+      window._auditproCloudHistory = saves;
+      el.innerHTML = saves.slice(0,6).map((s,i)=>{
+        const st = s.state || {};
+        const avgVal = s.cloudRow?.global_score || calcAverage(st);
+        const avgS = avgVal > 0 ? fmt(avgVal) : '—';
+        const ds = st.date ? (typeof formatDate === 'function' ? formatDate(st.date) : st.date) : '—';
+        const color = avgVal>=5?'var(--success)':avgVal>=4?'#84cc16':avgVal>=3?'#eab308':avgVal>=2?'#f97316':avgVal>0?'var(--score-1)':'var(--muted)';
+        return '<div class="home-recent-item" onclick="restoreAuditCloud('+i+')">'
+          +'<div class="home-recent-score" style="color:'+color+'">'+avgS+'</div>'
+          +'<div style="flex:1"><div class="home-recent-building">☁️ '+(st.building||'—')+(st.floor?' · '+st.floor:'')+'</div>'
+          +'<div class="home-recent-meta">'+ds+' · '+(st.auditor||s.cloudRow?.auditor_name||'—')+' · '+(st.type||s.cloudRow?.audit_type||'—')+'</div></div>'
+          +'<div style="color:var(--muted);font-size:18px">›</div></div>';
+      }).join('');
+    } catch(e){
+      const local = getLocalSaves();
+      if(!local.length){ el.innerHTML = '<div class="home-empty">⚠️ No se pudo leer Supabase y no hay respaldo local</div>'; return; }
+      window._auditproCloudHistory = local;
+      el.innerHTML = '<div class="home-empty">⚠️ Sin conexión a nube. Mostrando respaldo local.</div>';
+    }
+  }
+
+  const originalShowHome = window.showHomeScreen;
+  window.showHomeScreen = function(role){
+    if(typeof originalShowHome === 'function') originalShowHome.apply(this, arguments);
+    setTimeout(renderHomeRecentFromCloud, 80);
+  };
+
+  window.goToHistory = function(){
+    ['screen-setup','screen-home','screen-audit','screen-supervisor','screen-admin','screen-dashboard'].forEach(id => { const e=document.getElementById(id); if(e) e.style.display='none'; });
+    const sum = document.getElementById('screen-summary'); if(sum) sum.style.display='block';
+    const sb = document.getElementById('sidebar'); if(sb) sb.classList.remove('visible');
+    const hist = document.getElementById('history-section'); if(hist) hist.style.display = 'none';
+    window.loadHistory(true);
+  };
+
+  /* Dashboard: conservar versión existente si lee Supabase, pero reforzar estado visual y filtro por usuario auditor. */
+  const originalLoadDashboard = window.loadDashboard;
+  window.loadDashboard = async function(){
+    if(isDemo() && typeof originalLoadDashboard === 'function') return originalLoadDashboard.apply(this, arguments);
+    const kpis = document.getElementById('dash-kpis');
+    if(kpis) kpis.innerHTML = '<div style="grid-column:1/-1;color:var(--muted);padding:12px">⏳ Cargando dashboard desde Supabase...</div>';
+    if(typeof originalLoadDashboard === 'function'){
+      try { return await originalLoadDashboard.apply(this, arguments); }
+      catch(e){ console.warn('[AuditPro] Dashboard original falló:', e); }
+    }
+  };
+
+  /* Textos visibles */
+  document.addEventListener('DOMContentLoaded', function(){
+    document.querySelectorAll('.home-card-desc,.home-section-title').forEach(x => {
+      if((x.textContent || '').includes('esta tablet')) x.textContent = x.textContent.replace('esta tablet','la nube');
+    });
+  });
+})();
+</script>
+
 </body>
 </html>

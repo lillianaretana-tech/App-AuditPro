@@ -785,6 +785,18 @@
   .mp-thumb-del{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.75);border:none;border-radius:3px;width:18px;height:18px;cursor:pointer;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;padding:0}
   .mp-thumb-del:hover{background:var(--danger)}
   .mp-ai-badge-sm{position:absolute;top:2px;left:2px;background:rgba(34,197,94,.9);border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;color:#000}
+
+
+  /* SMART IA AUDIT GUIDE */
+  .smart-ai-guide{background:rgba(59,130,246,.09);border:1px solid rgba(59,130,246,.28);border-radius:12px;padding:12px 14px;margin:12px 0;font-size:12px;line-height:1.45;color:var(--text)}
+  .smart-ai-guide-title{font-family:'Syne',sans-serif;font-weight:800;color:#60a5fa;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .smart-ai-guide ul{margin:6px 0 0 18px;padding:0}.smart-ai-guide li{margin:3px 0}.smart-ai-guide small{color:var(--muted)}
+  .smart-ai-level{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(244,167,42,.08);border:1px solid rgba(244,167,42,.28);border-radius:10px;padding:8px 10px;margin:8px 0 10px;font-size:11px}
+  .smart-ai-level label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--accent)}
+  .smart-ai-level select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 8px;font-size:12px}
+  .smart-photo-note{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
+  .smart-warning{background:rgba(234,179,8,.10);border:1px solid rgba(234,179,8,.30);color:var(--score-3);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:11px;line-height:1.4}
+
 </style>
 </head>
 <body>
@@ -1300,10 +1312,16 @@ document.head.appendChild(_s);
         fd.append('subarea_id',sId); fd.append('subarea_name',sDef?sDef.name:sId);
         fd.append('checks',JSON.stringify(sDef?sDef.checks:[]));
         fd.append('photo_index',String(i+1)); fd.append('total_photos',String(ph.length));
-        fd.append('instruction','Eres auditor profesional de limpieza. Analiza la foto y devuelve SOLO JSON: descripcion, severidad, causa, accion, informe, tarea_sugerida, prioridad.');
+        if(window.AuditProSmartGuide){
+          fd.append('analysis_level', window.AuditProSmartGuide.getLevel());
+          fd.append('capture_guidance', window.AuditProSmartGuide.guidanceText(aId,sId,sDef?sDef.name:sId));
+          fd.append('instruction', window.AuditProSmartGuide.buildInstruction(aId,sId,aDef?aDef.name:aId,sDef?sDef.name:sId,sDef?sDef.checks:[],ph.length,i+1));
+        } else {
+          fd.append('instruction','Eres auditor profesional de limpieza. Analiza la foto y devuelve SOLO JSON: descripcion, severidad, causa, accion, informe, tarea_sugerida, prioridad.');
+        }
         return fetch(WH,{method:'POST',body:fd}).then(function(r){return r.text();}).then(function(raw){
           var pl; try{pl=JSON.parse(raw);}catch(e){pl={descripcion:raw,informe:raw};}
-          var ai={descripcion:pl.descripcion||pl.description||'',severidad:pl.severidad||pl.severity||'',causa:pl.causa||pl.cause||'',accion:pl.accion||pl.action||'',informe:pl.informe||pl.reportText||'',tarea_sugerida:pl.tarea_sugerida||pl.tarea||'',prioridad:pl.prioridad||'normal'};
+          var ai={descripcion:pl.descripcion||pl.description||'',severidad:pl.severidad||pl.severity||'',causa:pl.causa||pl.cause||'',accion:pl.accion||pl.action||'',informe:pl.informe||pl.reportText||'',tarea_sugerida:pl.tarea_sugerida||pl.tarea||'',prioridad:pl.prioridad||'normal',calidad_foto:pl.calidad_foto||pl.photo_quality||'',confianza:pl.confianza||pl.confidence||'',validacion_humana:pl.validacion_humana||pl.human_validation||'',tipo_condicion:pl.tipo_condicion||pl.condition_type||'',hallazgo_global:pl.hallazgo_global||pl.global_finding||''};
           ph[i].ai=ai;
           try{
             var sub=state.areas[aId].subareas[sId];
@@ -1328,6 +1346,11 @@ document.head.appendChild(_s);
               +(ai.severidad  ?'<b>Severidad:</b> '  +ai.severidad  +'<br>':'')
               +(ai.causa      ?'<b>Causa:</b> '      +ai.causa      +'<br>':'')
               +(ai.accion     ?'<b>Acción:</b> '     +ai.accion     +'<br>':'')
+              +(ai.tipo_condicion?'<b>Tipo de condición:</b> '+ai.tipo_condicion+'<br>':'')
+              +(ai.calidad_foto?'<b>Calidad de foto:</b> '+ai.calidad_foto+'<br>':'')
+              +(ai.confianza?'<b>Confianza:</b> '+ai.confianza+'<br>':'')
+              +(ai.validacion_humana?'<b>Validación humana:</b> '+ai.validacion_humana+'<br>':'')
+              +(ai.hallazgo_global?'<b>Hallazgo adicional:</b> '+ai.hallazgo_global+'<br>':'')
               +(ai.tarea_sugerida?'<b>Tarea:</b> '   +ai.tarea_sugerida:'');
           }
         }).catch(function(e){console.error('[MP IA foto '+(i+1)+']',e);});
@@ -2272,6 +2295,127 @@ document.head.appendChild(_s);
       if((x.textContent || '').includes('esta tablet')) x.textContent = x.textContent.replace('esta tablet','la nube');
     });
   });
+})();
+</script>
+
+
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   SMART IA AUDIT GUIDE — captura guiada + análisis estricto prudente
+   ══════════════════════════════════════════════════════════ */
+(function(){
+  var LEVEL_KEY='auditpro_ai_analysis_level';
+  function getLevel(){return localStorage.getItem(LEVEL_KEY)||'detallado';}
+  function setLevel(v){localStorage.setItem(LEVEL_KEY,v||'detallado'); syncSelectors(); if(typeof showToast==='function')showToast('🤖 Nivel IA: '+label(v));}
+  function label(v){return v==='estricto'?'Estricto':v==='normal'?'Normal':'Detallado';}
+  function norm(s){return String(s||'').toLowerCase();}
+  function classify(aId,sId,name){
+    var t=norm([aId,sId,name].join(' '));
+    if(/sink|lavaman|fregader|grifo|desag/.test(t))return 'sink';
+    if(/floor|piso|alfombra|carpet/.test(t))return /alfombra|carpet/.test(t)?'carpet':'floor';
+    if(/chemical|quim|quím|producto/.test(t))return 'chemicals';
+    if(/shelf|estant|rack|bodega|storage/.test(t))return 'shelving';
+    if(/toilet|inodoro|urinario|baño|bath/.test(t))return 'toilet';
+    if(/trash|basura|papelera|residuo/.test(t))return 'trash';
+    if(/dispens|suministro|suppl|jabón|papel/.test(t))return 'supplies';
+    if(/stair|escal|pasaman/.test(t))return 'stairs';
+    if(/wall|pared|techo|ventana|vidrio|glass/.test(t))return 'surface';
+    return 'general';
+  }
+  var guides={
+    sink:['1 foto general del fregadero completo.','1 foto cercana del grifo y bordes.','1 foto directa del desagüe/hoyo si hay suciedad, sarro u olor.'],
+    floor:['1 foto general del área para contexto.','1 foto cercana de manchas, marcas, corrosión o bordes.','Si hay brillo/reflejo, tomar otra foto desde un ángulo lateral.'],
+    carpet:['1 foto general del área alfombrada.','1 foto cercana de bordes, esquinas y pelusa acumulada.','1 foto del punto exacto si hay mancha, humedad o desgaste.'],
+    chemicals:['Etiquetas visibles de los químicos.','Foto de orden, separación y almacenamiento.','Foto cercana de derrames, envases sin etiqueta o bandejas.'],
+    shelving:['Foto frontal completa del estante.','Foto cercana de patas, tornillos, oxidación o inclinación.','Foto del peso/carga si parece inestable.'],
+    toilet:['Foto general del cubículo.','Foto cercana del inodoro/urinario.','Foto de base, bordes, tapa, piso cercano y dispensadores.'],
+    trash:['Foto general del contenedor/papelera.','Foto cercana de bolsa, residuos visibles y tapa.','Foto del área alrededor si hay derrames u olor.'],
+    supplies:['Foto del dispensador completo.','Foto del nivel de papel/jabón/toallas.','Foto de daños, suciedad o falta de identificación.'],
+    stairs:['Foto general de escaleras.','Foto cercana de bordes, esquinas y pasamanos.','Foto de zonas con polvo, humedad o riesgo de resbalón.'],
+    surface:['Foto general de la superficie.','Foto cercana de manchas, polvo, grietas o humedad.','Foto lateral si hay reflejo o condición difícil de ver.'],
+    general:['1 foto general para contexto.','1 foto cercana del detalle importante.','1 foto adicional desde otro ángulo si hay duda.']
+  };
+  function guideArray(aId,sId,name){return guides[classify(aId,sId,name)]||guides.general;}
+  function guidanceText(aId,sId,name){return guideArray(aId,sId,name).join(' | ');}
+  function focusText(aId,sId,name){
+    var c=classify(aId,sId,name);
+    return {
+      sink:'Foco: limpieza real en grifo, bordes, desagüe, sarro, residuos, humedad y olores visibles.',
+      floor:'Foco: diferenciar suciedad corregible, mancha permanente, desgaste de cera, corrosión, marca de cepillo, sombra o reflejo.',
+      carpet:'Foco: polvo/pelusa en bordes, manchas, humedad, desgaste y suciedad acumulada.',
+      chemicals:'Foco: etiquetas, compatibilidad, derrames, envases abiertos, orden, almacenamiento y riesgo químico.',
+      shelving:'Foco: estabilidad, inclinación, oxidación, daño estructural, carga excesiva, limpieza y seguridad.',
+      toilet:'Foco: suciedad visible, sarro, olor sugerido por residuos, base, bordes, piso cercano y suministros.',
+      trash:'Foco: rebalse, bolsa, olores sugeridos, residuos alrededor, tapa y frecuencia de retiro.',
+      supplies:'Foco: faltantes, dispensadores dañados, limpieza exterior, reposición y funcionalidad.',
+      stairs:'Foco: polvo en bordes, pasamanos, humedad, seguridad y percepción de limpieza.',
+      surface:'Foco: polvo, manchas, humedad, moho, daño o condición permanente.',
+      general:'Foco: condición visible del elemento auditado y riesgos críticos alrededor.'
+    }[c]||'';
+  }
+  function buildInstruction(aId,sId,aName,sName,checks,total,index){
+    var lvl=getLevel();
+    var intensity=lvl==='estricto'?'Revisa minuciosamente cada zona visible, bordes, esquinas, sombras, reflejos, deterioro, residuos, humedad, corrosión, daños y riesgos. Sé exigente, pero no inventes.':(lvl==='normal'?'Haz un análisis operativo claro y directo enfocado en la subárea.':'Haz un análisis detallado, revisando también bordes, acumulaciones, calidad de foto, desgaste y posibles riesgos visibles.');
+    return [
+      'Eres auditor profesional senior de limpieza, mantenimiento y facilities.',
+      'Analiza la foto en el contexto del área: '+aName+' / subárea: '+sName+'.',
+      'Nivel de análisis solicitado: '+label(lvl)+'. '+intensity,
+      'Guía de captura esperada: '+guidanceText(aId,sId,sName)+'.',
+      'Criterios específicos: '+focusText(aId,sId,sName),
+      'Checks de auditoría: '+JSON.stringify(checks||[])+'.',
+      'Foto '+index+' de '+total+'. Si una sola foto no permite validar, dilo claramente.',
+      'Diferencia entre: suciedad corregible, mancha permanente, desgaste normal, corrosión, daño estructural, sombra/reflejo y condición que requiere validación humana.',
+      'Si detectas un riesgo crítico fuera de la categoría principal, inclúyelo como hallazgo_global; si no, deja hallazgo_global vacío.',
+      'No afirmes con certeza lo que no se pueda ver. Usa validacion_humana cuando haga falta confirmar en sitio.',
+      'Devuelve SOLO JSON válido con estas claves exactas: descripcion, severidad, causa, accion, informe, tarea_sugerida, prioridad, calidad_foto, confianza, validacion_humana, tipo_condicion, hallazgo_global.',
+      'Prioridad debe ser normal o urgente. Severidad puede ser Baja, Media, Alta o Crítica.'
+    ].join(' ');
+  }
+  function levelControlHtml(){
+    return '<div class="smart-ai-level"><label>🤖 Nivel de análisis IA</label><select class="smart-ai-level-select" onchange="AuditProSmartGuide.setLevel(this.value)"><option value="normal">Normal</option><option value="detallado">Detallado</option><option value="estricto">Estricto / Picky</option></select><span class="smart-photo-note">Detallado es el equilibrio recomendado. Estricto marca más dudas y validaciones humanas.</span></div>';
+  }
+  function syncSelectors(){document.querySelectorAll('.smart-ai-level-select').forEach(function(s){s.value=getLevel();});}
+  function addGuide(aId,sId,sName){
+    var input=document.getElementById('ai-photo-'+aId+'-'+sId);
+    var aiBtn=document.querySelector('[data-mp-ai="'+sId+'"]');
+    var anchor=input?input.parentElement:(aiBtn?aiBtn.parentElement:null);
+    if(!anchor||document.getElementById('smart-guide-'+aId+'-'+sId))return;
+    var arr=guideArray(aId,sId,sName);
+    var box=document.createElement('div');box.id='smart-guide-'+aId+'-'+sId;box.className='smart-ai-guide';
+    box.innerHTML='<div class="smart-ai-guide-title">📸 Guía para tomar evidencia</div>'+levelControlHtml()+'<div><b>Fotos recomendadas:</b></div><ul>'+arr.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul><div class="smart-photo-note">'+focusText(aId,sId,sName)+'</div><div class="smart-warning">Criterio profesional: la IA puede detectar posibles hallazgos, pero si hay manchas permanentes, desgaste, corrosión vieja o marcas que no salen, debe marcarse como validación humana y no como incumplimiento automático.</div>';
+    anchor.parentElement.insertBefore(box,anchor);
+    syncSelectors();
+  }
+  function patchGuides(){
+    try{
+      if(typeof state==='undefined'||!state||!state.selectedAreas||!state.areas||typeof AREA_DEFS==='undefined')return;
+      var idx=typeof state.currentAreaIdx==='number'?state.currentAreaIdx:0;
+      var aId=state.selectedAreas[idx]; if(!aId)return;
+      var aDef=AREA_DEFS.find(function(a){return a.id===aId;}); if(!aDef)return;
+      aDef.subareas.forEach(function(s){addGuide(aId,s.id,s.name||s.id);});
+    }catch(e){console.warn('[Smart Guide]',e);}
+  }
+  function hookRender(){
+    var orig=window.renderArea;if(typeof orig!=='function'||orig._smartHook)return false;
+    window.renderArea=function(){orig.apply(this,arguments);setTimeout(patchGuides,130);};
+    window.renderArea._smartHook=true;return true;
+  }
+  function hookAnalyze(){
+    var orig=window._mpAnalyze;if(typeof orig!=='function'||orig._smartHook)return false;
+    window._mpAnalyze=function(aId,sId){
+      try{
+        var ph=(window._mpGetPhotos&&window._mpGetPhotos(aId,sId))||[];
+        var lvl=getLevel();
+        if(ph.length<2&&lvl!=='normal'&&typeof showToast==='function')showToast('📸 Para análisis '+label(lvl).toLowerCase()+', se recomiendan al menos 2 fotos: general + detalle.');
+      }catch(e){}
+      return orig.apply(this,arguments);
+    };
+    window._mpAnalyze._smartHook=true;return true;
+  }
+  document.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('.subarea-top'))setTimeout(patchGuides,160);},true);
+  var t=setInterval(function(){var ok1=hookRender(),ok2=hookAnalyze();patchGuides();if(ok1&&ok2)clearInterval(t);},400);
+  window.AuditProSmartGuide={getLevel:getLevel,setLevel:setLevel,buildInstruction:buildInstruction,guidanceText:guidanceText,patchGuides:patchGuides,label:label};
 })();
 </script>
 
